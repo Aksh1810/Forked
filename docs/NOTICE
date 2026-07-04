@@ -13,3 +13,9 @@ Stockfish is executed strictly as a separate operating system process over
 the UCI protocol. It is not linked into, compiled into, or vendored within
 this repository. The worker's Docker image downloads the pinned official
 Stockfish release at build time and carries this same attribution.
+
+The embedded opening book table (packages/shared/src/openings.gen.ts) is
+generated from the lichess-org/chess-openings dataset, dedicated to the
+public domain under CC0.
+
+  Source: https://github.com/lichess-org/chess-openings
