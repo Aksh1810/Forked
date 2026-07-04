@@ -22,3 +22,13 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+
+  # Validates the pinned Stockfish download and that the worker image's
+  # engine binary actually runs. Local Docker is not required for development
+  # of phases 0 and 1, so CI is where this is proven.
+  worker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f packages/worker/Dockerfile -t blunderfarm-worker .
+      - run: docker run --rm blunderfarm-worker sh -c "echo uci | stockfish | grep -m1 'id name'"
