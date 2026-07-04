@@ -1,0 +1,15 @@
+blunderfarm NOTICE
+
+This repository's own code is licensed under the MIT License (see LICENSE).
+
+blunderfarm uses the Stockfish chess engine as an external, separately
+licensed program. Stockfish is free software licensed under the GNU General
+Public License version 3 (GPLv3), developed by the Stockfish developers.
+
+  Source:  https://github.com/official-stockfish/Stockfish
+  License: https://www.gnu.org/licenses/gpl-3.0.html
+
+Stockfish is executed strictly as a separate operating system process over
+the UCI protocol. It is not linked into, compiled into, or vendored within
+this repository. The worker's Docker image downloads the pinned official
+Stockfish release at build time and carries this same attribution.
