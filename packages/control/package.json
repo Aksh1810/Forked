@@ -1,0 +1,16 @@
+{
+  "name": "@blunderfarm/control",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "synth": "tsc -b && cdk synth --quiet"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.261.0",
+    "constructs": "^10.6.0"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.1129.0"
+  }
+}
