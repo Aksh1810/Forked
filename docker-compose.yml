@@ -1,0 +1,17 @@
+# Local development stack. Phase 0 skeleton: queue and table stand-ins only.
+# The worker service (packages/worker Dockerfile, scaled with --scale worker=N)
+# lands here in Phase 2.
+services:
+  elasticmq:
+    image: softwaremill/elasticmq-native
+    ports:
+      - "9324:9324"
+      - "9325:9325"
+    volumes:
+      - ./compose/elasticmq.conf:/opt/elasticmq.conf
+
+  dynamodb:
+    image: amazon/dynamodb-local
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports:
+      - "8000:8000"
