@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1079.0",
+    "@aws-sdk/client-sqs": "^3.1079.0",
+    "@aws-sdk/lib-dynamodb": "^3.1079.0",
     "@blunderfarm/shared": "*"
   }
 }

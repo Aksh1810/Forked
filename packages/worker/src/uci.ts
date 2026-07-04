@@ -9,9 +9,14 @@ export class EngineTimeoutError extends Error {
   }
 }
 
+// Hash size is part of the determinism contract AND therefore implicitly
+// part of the cache-key contract: records analyzed at different hash sizes
+// would collide under the same content address. It is deliberately not
+// configurable.
+const HASH_MB = 64
+
 export interface EngineOptions {
   enginePath?: string
-  hashMb?: number
   respawnAfterGames?: number
 }
 
@@ -49,12 +54,10 @@ export class Engine {
   private waiter: Waiter | null = null
   private gamesSinceSpawn = 0
   private readonly path: string
-  private readonly hashMb: number
   private readonly respawnAfterGames: number
 
   private constructor(opts: EngineOptions) {
     this.path = opts.enginePath ?? process.env.STOCKFISH_PATH ?? 'stockfish'
-    this.hashMb = opts.hashMb ?? 64
     this.respawnAfterGames = opts.respawnAfterGames ?? 50
   }
 
@@ -82,7 +85,7 @@ export class Engine {
     // search limits only. Depth and movetime limits are forbidden; both are
     // non-deterministic across hardware.
     this.send('setoption name Threads value 1')
-    this.send(`setoption name Hash value ${this.hashMb}`)
+    this.send(`setoption name Hash value ${HASH_MB}`)
     this.send('setoption name MultiPV value 2')
     await this.ready(10_000)
   }
@@ -107,7 +110,8 @@ export class Engine {
     this.send(moves.length ? `position startpos moves ${moves.join(' ')}` : 'position startpos')
     this.send(`go nodes ${nodes}`)
 
-    let scored: ScoredInfo | null = null
+    let exact: ScoredInfo | null = null
+    let bound: ScoredInfo | null = null
     const bestLine = await this.waitFor(
       (l) => l.startsWith('bestmove '),
       watchdogMs,
@@ -118,17 +122,22 @@ export class Engine {
         if (!score) return
         const multipv = MULTIPV_RE.exec(l)
         if (multipv && multipv[1] !== '1') return
-        scored = {
+        const info: ScoredInfo = {
           kind: score[1] as 'cp' | 'mate',
           value: Number(score[2]),
           pv: l.split(' pv ')[1]?.trim().split(/\s+/) ?? [],
         }
+        // Aspiration-window re-searches emit lowerbound/upperbound lines; a
+        // node-limit stop can leave one as the final line. Prefer the last
+        // EXACT score, falling back to a bound only if no exact line came.
+        if (l.includes(' lowerbound') || l.includes(' upperbound')) bound = info
+        else exact = info
       },
     )
 
-    // The cast re-widens after the closure writes above; TS control-flow
+    // The casts re-widen after the closure writes above; TS control-flow
     // analysis cannot see assignments made inside the onLine callback.
-    const found = scored as ScoredInfo | null
+    const found = (exact ?? bound) as ScoredInfo | null
     if (!found) throw new Error('engine sent bestmove without any scored info line')
     // UCI scores are from the side to move's perspective; normalize to
     // White's perspective here, at the wrapper boundary, and nowhere else.

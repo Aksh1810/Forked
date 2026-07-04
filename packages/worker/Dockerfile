@@ -41,5 +41,4 @@ COPY --from=build /app/packages/shared/package.json packages/shared/
 COPY --from=build /app/packages/worker/dist packages/worker/dist
 COPY --from=build /app/packages/worker/package.json packages/worker/
 ENV STOCKFISH_PATH=/usr/local/bin/stockfish
-# Phase 2 replaces this stub with the SQS polling loop.
-CMD ["node", "packages/worker/dist/index.js"]
+CMD ["node", "packages/worker/dist/main.js"]
