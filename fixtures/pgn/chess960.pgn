@@ -1,0 +1,11 @@
+[Event "fixture: chess960, must be rejected"]
+[Site "?"]
+[Date "2026.01.03"]
+[White "fischer"]
+[Black "random"]
+[Result "*"]
+[Variant "Chess960"]
+[SetUp "1"]
+[FEN "bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w HFhf - 0 1"]
+
+1. d4 d5 2. g3 g6 3. c4 c6 *

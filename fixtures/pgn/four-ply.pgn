@@ -1,0 +1,8 @@
+[Event "fixture: four plies, must be rejected as too short"]
+[Site "?"]
+[Date "2026.01.04"]
+[White "quick"]
+[Black "quit"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 *

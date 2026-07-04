@@ -1,0 +1,9 @@
+[Event "fixture: eval perspective, White wins a queen early and stays winning"]
+[Site "?"]
+[Date "2026.01.02"]
+[White "winner"]
+[Black "hanger"]
+[Result "*"]
+[TimeControl "600"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 Qg5 4. Nxg5 Nf6 5. d3 h6 6. Nf3 d6 7. Nc3 Bd7 8. O-O O-O-O *

@@ -1,0 +1,11 @@
+[Event "fixture: identical move list, game A"]
+[Site "?"]
+[Date "2026.02.01"]
+[White "alice"]
+[Black "annie"]
+[Result "1-0"]
+[WhiteElo "1200"]
+[BlackElo "1150"]
+[TimeControl "180"]
+
+1. e4 {[%clk 0:02:58]} e5 {[%clk 0:02:57.3]} 2. Bc4 {[%clk 0:02:55]} Nc6 {[%clk 0:02:50.1]} 3. Qh5 {[%clk 0:02:40]} Nf6 {[%clk 0:02:30]} 4. Qxf7# {[%clk 0:02:38.6]} 1-0

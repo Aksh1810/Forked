@@ -1,0 +1,11 @@
+[Event "fixture: scholars mate, known annotated game"]
+[Site "?"]
+[Date "2026.01.01"]
+[White "attacker"]
+[Black "victim"]
+[Result "1-0"]
+[WhiteElo "900"]
+[BlackElo "850"]
+[TimeControl "180"]
+
+1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7# 1-0

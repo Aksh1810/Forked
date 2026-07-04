@@ -1,0 +1,8 @@
+[Event "fixture: poison, illegal move at ply 5"]
+[Site "?"]
+[Date "2026.01.05"]
+[White "corrupt"]
+[Black "data"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Qxe5 Nf6 *
