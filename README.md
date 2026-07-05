@@ -1,4 +1,4 @@
-# blunderfarm
+# Forked
 
 Distributed chess analysis. Enter a chess.com username, a pool of Stockfish
 workers analyzes your entire archive at full, consistent engine depth, and you
