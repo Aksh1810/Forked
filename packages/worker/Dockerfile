@@ -1,5 +1,5 @@
 # Build from the repository root:
-#   docker build -f packages/worker/Dockerfile -t blunderfarm-worker .
+#   docker build -f packages/worker/Dockerfile -t forked-worker .
 #
 # Stockfish is GPLv3 (see /NOTICE inside the image). It is downloaded as the
 # pinned official release binary at build time, never vendored into this
@@ -30,9 +30,9 @@ RUN apt-get update \
   && apt-get purge -y curl \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
-LABEL org.opencontainers.image.title="blunderfarm-worker"
+LABEL org.opencontainers.image.title="forked-worker"
 LABEL org.opencontainers.image.licenses="MIT AND GPL-3.0-only"
-LABEL org.opencontainers.image.description="blunderfarm analysis worker; bundles the GPLv3 Stockfish engine as a separate process"
+LABEL org.opencontainers.image.description="forked analysis worker; bundles the GPLv3 Stockfish engine as a separate process"
 COPY docs/NOTICE /NOTICE
 WORKDIR /app
 COPY --from=build /app/node_modules node_modules
@@ -41,4 +41,6 @@ COPY --from=build /app/packages/shared/package.json packages/shared/
 COPY --from=build /app/packages/worker/dist packages/worker/dist
 COPY --from=build /app/packages/worker/package.json packages/worker/
 ENV STOCKFISH_PATH=/usr/local/bin/stockfish
+# Long-running network consumer: no reason to keep root.
+USER node
 CMD ["node", "packages/worker/dist/main.js"]

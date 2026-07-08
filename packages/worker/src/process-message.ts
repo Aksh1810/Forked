@@ -1,5 +1,5 @@
-import { GetCommand } from '@aws-sdk/lib-dynamodb'
-import { gameKey, type GameTask } from '@blunderfarm/shared'
+import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { gameKey, metricsKey, type GameTask } from '@forked/shared'
 import { getEngineRecord, putEngineRecord } from './cache.js'
 import { buildDoneOutcome } from './contribution.js'
 import { executeCompletion } from './completion.js'
@@ -56,6 +56,21 @@ export async function processTask(
   )
   const result = await executeCompletion(deps, jobId, gameId, outcome)
   log('info', 'game completed', { jobId, gameId, result, cacheHit, accuracy: outcome.ringEntry.accuracy })
+  if (result === 'applied' && !cacheHit) {
+    // Landing-page ticker counter. Fire and forget: approximate by design,
+    // never blocks or fails the completion path. Cache hits do not tick;
+    // those positions were judged once already.
+    deps.ddb
+      .send(
+        new UpdateCommand({
+          TableName: deps.table,
+          Key: metricsKey('TOTAL'),
+          UpdateExpression: 'ADD positions :p, games :one',
+          ExpressionAttributeValues: { ':p': record.plies.length, ':one': 1 },
+        }),
+      )
+      .catch((err) => log('warn', 'metrics tick failed', { jobId, gameId, error: String(err) }))
+  }
   if (result === 'applied') await tryFinalize(deps, jobId)
   return 'completed'
 }

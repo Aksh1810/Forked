@@ -1,5 +1,5 @@
 {
-  "name": "blunderfarm",
+  "name": "forked",
   "private": true,
   "version": "0.0.0",
   "license": "MIT",
@@ -9,6 +9,9 @@
   "workspaces": [
     "packages/*"
   ],
+  "overrides": {
+    "postcss": "^8.5.10"
+  },
   "scripts": {
     "test": "vitest run",
     "lint": "eslint .",
@@ -18,6 +21,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^20.19.43",
+    "esbuild": "^0.28.1",
     "eslint": "^10.6.0",
     "globals": "^17.7.0",
     "typescript": "^6.0.3",

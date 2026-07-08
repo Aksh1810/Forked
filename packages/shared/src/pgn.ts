@@ -1,5 +1,5 @@
 import { Chess, castlingSide, normalizeMove } from 'chessops/chess'
-import { parsePgn } from 'chessops/pgn'
+import { parsePgn, type Game, type PgnNodeData } from 'chessops/pgn'
 import { parseSan } from 'chessops/san'
 import { makeUci, parseUci } from 'chessops/util'
 import type { Move } from 'chessops/types'
@@ -20,7 +20,7 @@ export function standardUci(pos: Chess, move: Move): string {
 const STANDARD_FEN_BOARD = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq'
 const CLK_RE = /\[%clk\s+(\d+):(\d{1,2}):(\d{1,2}(?:\.\d+)?)\]/
 
-export type PgnRejectionCode = 'empty' | 'variant' | 'illegal-move' | 'too-short'
+export type PgnRejectionCode = 'empty' | 'variant' | 'illegal-move' | 'too-short' | 'too-long'
 
 export interface PgnRejection {
   ok: false
@@ -42,9 +42,25 @@ export interface ParsedGame {
   terminal: 'checkmate' | 'stalemate' | null
 }
 
+// Hard ceiling on game length. The longest serious recorded games sit around
+// 550 plies; anything past this is a pasted-PGN denial-of-service attempt (one
+// enormous game would pin a worker for hours, its lease heartbeat dutifully
+// extending the whole time), not chess.
+const MAX_PLIES = 600
+
 function rating(v: string | undefined): number | null {
   const n = Number.parseInt(v ?? '', 10)
   return Number.isFinite(n) ? n : null
+}
+
+// chess.com occasionally sends a player name as the literal string "undefined"
+// (closed accounts, some bots). Normalize those and blanks to a stable
+// placeholder so the UI never says "against undefined". Length-capped: header
+// values are attacker-supplied on the PGN-paste path and get stored in game
+// records; chess.com usernames max out around 25 characters.
+function playerName(v: string | undefined): string {
+  const n = v?.trim().slice(0, 60)
+  return n && n !== 'undefined' ? n : '?'
 }
 
 // Parses one game's PGN into a clean UCI move list plus game-record fields.
@@ -55,7 +71,15 @@ export function parseGamePgn(text: string): ParsedGame | PgnRejection {
   const games = parsePgn(text)
   const game = games[0]
   if (!game) return { ok: false, code: 'empty', message: 'No game found in PGN.' }
+  return parseGame(game)
+}
 
+// Multi-game PGN paste: each game in the text parses or rejects on its own.
+export function parseAllGamesPgn(text: string): (ParsedGame | PgnRejection)[] {
+  return parsePgn(text).map(parseGame)
+}
+
+function parseGame(game: Game<PgnNodeData>): ParsedGame | PgnRejection {
   const headers = game.headers
   const variant = headers.get('Variant')
   if (variant && variant.toLowerCase() !== 'standard') {
@@ -70,6 +94,9 @@ export function parseGamePgn(text: string): ParsedGame | PgnRejection {
   const uciMoves: string[] = []
   const clocks: (number | null)[] = []
   for (const node of game.moves.mainline()) {
+    if (uciMoves.length >= MAX_PLIES) {
+      return { ok: false, code: 'too-long', message: `Game exceeds ${MAX_PLIES} plies.` }
+    }
     const move = parseSan(pos, node.san)
     if (!move) {
       return {
@@ -99,10 +126,10 @@ export function parseGamePgn(text: string): ParsedGame | PgnRejection {
     ok: true,
     uciMoves,
     clocks,
-    white: { name: headers.get('White') ?? '?', rating: rating(headers.get('WhiteElo')) },
-    black: { name: headers.get('Black') ?? '?', rating: rating(headers.get('BlackElo')) },
+    white: { name: playerName(headers.get('White')), rating: rating(headers.get('WhiteElo')) },
+    black: { name: playerName(headers.get('Black')), rating: rating(headers.get('BlackElo')) },
     result,
-    timeControl: headers.get('TimeControl') ?? '?',
+    timeControl: (headers.get('TimeControl') ?? '?').slice(0, 32),
     date,
     eco: opening?.eco ?? null,
     openingName: opening?.name ?? null,

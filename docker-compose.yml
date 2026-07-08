@@ -8,7 +8,7 @@ services:
     init: true
     stop_grace_period: 45s
     environment:
-      TABLE_NAME: blunderfarm
+      TABLE_NAME: forked
       QUEUE_NAME: analysis-tasks
       DLQ_NAME: analysis-tasks-dlq
       SQS_ENDPOINT: http://elasticmq:9324
@@ -30,7 +30,7 @@ services:
     init: true
     environment:
       WORKER_MODE: dlq
-      TABLE_NAME: blunderfarm
+      TABLE_NAME: forked
       QUEUE_NAME: analysis-tasks
       DLQ_NAME: analysis-tasks-dlq
       SQS_ENDPOINT: http://elasticmq:9324

@@ -9,7 +9,9 @@ export interface Deps {
   table: string
 }
 
-export function makeDeps(config: WorkerConfig): Deps {
+export function makeDeps(
+  config: Pick<WorkerConfig, 'region' | 'dynamoEndpoint' | 'sqsEndpoint' | 'tableName'>,
+): Deps {
   const ddb = DynamoDBDocumentClient.from(
     new DynamoDBClient({ region: config.region, endpoint: config.dynamoEndpoint }),
     { marshallOptions: { removeUndefinedValues: true } },

@@ -1,6 +1,6 @@
 // One-place rename: every surface (UI, cards, README generators) reads the
 // product name from this constant and nowhere else.
-export const BRAND_NAME = 'blunderfarm'
+export const BRAND_NAME = 'forked'
 
 // The engine version pinned in packages/worker/Dockerfile, as the binary
 // reports it via "id name". Ingest uses it to compute cache keys before any

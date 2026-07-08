@@ -12,7 +12,14 @@ test('opening family strips the variation suffix', () => {
 })
 
 test('ring merge keeps the last 20 in order', () => {
-  const entry = (i: number): RingEntry => ({ gameId: `g${i}`, accuracy: i, finishedAt: `t${i}` })
+  const entry = (i: number): RingEntry => ({
+    gameId: `g${i}`,
+    accuracy: i,
+    finishedAt: `t${i}`,
+    opp: 'rival',
+    res: 'w',
+    plies: 10,
+  })
   let ring: RingEntry[] = []
   for (let i = 0; i < 25; i++) ring = mergeRing(ring, entry(i))
   expect(ring).toHaveLength(20)

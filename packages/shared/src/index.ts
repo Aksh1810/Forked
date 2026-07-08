@@ -24,6 +24,9 @@ export {
   lockKey,
   metricsKey,
   archiveKey,
+  rateKey,
+  leaderUserKey,
+  leaderBlunderKey,
   STATUS_GSI,
   analyzingGsiAttrs,
 } from './table.js'
@@ -33,6 +36,22 @@ export {
   mergeRing,
   type GameAggContribution,
 } from './aggregates.js'
+export {
+  computeInsights,
+  userMoves,
+  fenBeforePly,
+  type AnalyzedGame,
+  type UserMove,
+  type Insights,
+} from './insights.js'
+export {
+  archetype,
+  computeArchetypeFeatures,
+  type Archetype,
+  type ArchetypeFeatures,
+} from './archetype.js'
+export { selectDelighter, type Delighter } from './delighter.js'
+export { buildWrappedSummary, WrappedSummarySchema, type WrappedSummary } from './wrapped.js'
 export {
   EvalSchema,
   ClassificationSchema,
@@ -53,6 +72,7 @@ export { cacheKey } from './cache-key.js'
 export { matchOpening, type OpeningMatch } from './openings.js'
 export {
   parseGamePgn,
+  parseAllGamesPgn,
   finalStatus,
   standardUci,
   type ParsedGame,

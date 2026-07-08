@@ -8,3 +8,11 @@ coverage/
 .env.*
 .DS_Store
 .claude/settings.local.json
+
+# Private ops log (account details, deploy-day evidence); the rest of docs/
+# is published and linked from the README.
+docs/migration-plan.md
+
+# DynamoDB Local (jvm-stack) artifact
+dynamodb-local-metadata.json
+CLAUDE.md

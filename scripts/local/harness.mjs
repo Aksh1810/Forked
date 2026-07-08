@@ -27,7 +27,7 @@ import {
   tryFinalize,
 } from '../../packages/worker/dist/index.js'
 
-export const TABLE = 'blunderfarm'
+export const TABLE = 'forked'
 export const ENGINE_VERSION = process.env.ENGINE_VERSION ?? PINNED_ENGINE_VERSION
 
 const ddbClient = new DynamoDBClient({
@@ -70,7 +70,7 @@ export async function ensureTable() {
               { AttributeName: 'gsi1pk', KeyType: 'HASH' },
               { AttributeName: 'gsi1sk', KeyType: 'RANGE' },
             ],
-            Projection: { ProjectionType: 'ALL' },
+            Projection: { ProjectionType: 'INCLUDE', NonKeyAttributes: ['jobId', 'username', 'status'] },
             ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
           },
         ],

@@ -13,7 +13,7 @@ export {
   executeCompletion,
   type CompletionOutcome,
 } from './completion.js'
-export { tryFinalize } from './finalize.js'
+export { tryFinalize, finalizeJob } from './finalize.js'
 export { getEngineRecord, putEngineRecord } from './cache.js'
 export { buildDoneOutcome } from './contribution.js'
 export { processTask, type TaskResult } from './process-message.js'

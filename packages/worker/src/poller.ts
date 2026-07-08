@@ -3,7 +3,7 @@ import {
   DeleteMessageCommand,
   ReceiveMessageCommand,
 } from '@aws-sdk/client-sqs'
-import { GameTaskSchema } from '@blunderfarm/shared'
+import { GameTaskSchema } from '@forked/shared'
 import type { Deps } from './db.js'
 import { processDlqTask } from './dlq.js'
 import { log } from './log.js'

@@ -1,14 +1,22 @@
 {
-  "name": "@blunderfarm/control",
+  "name": "@forked/control",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "./dist/src/index.js",
   "scripts": {
-    "synth": "tsc -b && cdk synth --quiet"
+    "synth": "tsc -b && cdk synth --quiet",
+    "api": "node dist/src/local.js"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1079.0",
+    "@aws-sdk/client-sqs": "^3.1079.0",
+    "@aws-sdk/lib-dynamodb": "^3.1079.0",
+    "@forked/shared": "*",
+    "@forked/worker": "*",
     "aws-cdk-lib": "^2.261.0",
-    "constructs": "^10.6.0"
+    "constructs": "^10.6.0",
+    "hono": "^4.0.0"
   },
   "devDependencies": {
     "aws-cdk": "^2.1129.0"

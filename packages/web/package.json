@@ -1,5 +1,5 @@
 {
-  "name": "@blunderfarm/web",
+  "name": "@forked/web",
   "private": true,
   "version": "0.0.0",
   "scripts": {
@@ -9,12 +9,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@blunderfarm/shared": "*",
+    "@forked/shared": "*",
+    "@vercel/og": "^0.11.1",
+    "d3": "^7.9.0",
     "next": "^16.2.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@types/d3": "^7.4.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3"
   }

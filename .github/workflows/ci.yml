@@ -30,5 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f packages/worker/Dockerfile -t blunderfarm-worker .
-      - run: docker run --rm blunderfarm-worker sh -c "echo uci | stockfish | grep -m1 'id name'"
+      - run: docker build -f packages/worker/Dockerfile -t forked-worker .
+      - run: docker run --rm forked-worker sh -c "echo uci | stockfish | grep -m1 'id name'"
+      # The Lambda variant of the same image: engine still runs, and the
+      # handler module the runtime interface client loads actually resolves.
+      - run: docker build -f packages/worker/Dockerfile.lambda -t forked-worker-lambda .
+      - run: docker run --rm --entrypoint sh forked-worker-lambda -c "echo uci | stockfish | grep -m1 'id name'"
+      - run: docker run --rm --entrypoint node forked-worker-lambda -e "import('./packages/worker/dist/lambda.js').then(m => { if (typeof m.handler !== 'function' || typeof m.dlqHandler !== 'function') { console.error('handler exports missing'); process.exit(1) } console.log('lambda handlers ok') })"

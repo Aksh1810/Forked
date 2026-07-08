@@ -1,8 +1,8 @@
 import { expect, test } from 'vitest'
-import type { RingEntry } from '@blunderfarm/shared'
+import type { RingEntry } from '@forked/shared'
 import { buildCompletionTransaction, type CompletionOutcome } from '../src/completion.js'
 
-const ringEntry: RingEntry = { gameId: 'g1', accuracy: 91.2, finishedAt: 't1' }
+const ringEntry: RingEntry = { gameId: 'g1', accuracy: 91.2, finishedAt: 't1', opp: 'rival', res: 'w', plies: 36 }
 const done: CompletionOutcome = {
   kind: 'done',
   attempts: 1,
@@ -46,6 +46,9 @@ test('ring is merged onto the current ring, capped at 20', () => {
     gameId: `old${i}`,
     accuracy: null,
     finishedAt: `t${i}`,
+    opp: 'rival',
+    res: '?' as const,
+    plies: 10,
   }))
   const tx = buildCompletionTransaction('t', 'job1', 'g1', done, current, 'now')
   const ring = tx.TransactItems![1].Update!.ExpressionAttributeValues![':ring'] as RingEntry[]

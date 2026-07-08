@@ -1,8 +1,8 @@
-blunderfarm NOTICE
+forked NOTICE
 
 This repository's own code is licensed under the MIT License (see LICENSE).
 
-blunderfarm uses the Stockfish chess engine as an external, separately
+forked uses the Stockfish chess engine as an external, separately
 licensed program. Stockfish is free software licensed under the GNU General
 Public License version 3 (GPLv3), developed by the Stockfish developers.
 

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { matchOpening, parseGamePgn, whiteWinPct } from '@blunderfarm/shared'
+import { matchOpening, parseGamePgn, whiteWinPct } from '@forked/shared'
 import { analyzeGame } from '../src/analyze.js'
 import { Engine } from '../src/uci.js'
 

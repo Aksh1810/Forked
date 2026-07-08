@@ -1,5 +1,5 @@
 import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
-import { EngineRecordSchema, cacheItemKey, type EngineRecord } from '@blunderfarm/shared'
+import { EngineRecordSchema, cacheItemKey, type EngineRecord } from '@forked/shared'
 import type { Deps } from './db.js'
 
 export async function getEngineRecord(deps: Deps, cacheKey: string): Promise<EngineRecord | null> {

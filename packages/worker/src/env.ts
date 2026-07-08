@@ -13,7 +13,7 @@ export interface WorkerConfig {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
   return {
-    tableName: env.TABLE_NAME ?? 'blunderfarm',
+    tableName: env.TABLE_NAME ?? 'forked',
     region: env.AWS_REGION ?? 'us-east-1',
     dynamoEndpoint: env.DYNAMO_ENDPOINT,
     sqsEndpoint: env.SQS_ENDPOINT,

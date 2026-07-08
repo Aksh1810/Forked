@@ -1,0 +1,14 @@
+# Shared by both worker Dockerfiles and CDK image-asset staging: everything
+# the in-image npm ci + tsc build regenerates stays out of the build context.
+# Patterns are **-prefixed because dockerignore roots bare names, and cdk.out
+# lives at packages/control/cdk.out (staging it recurses into itself).
+# tsbuildinfo lives at package roots, not dist; stale buildinfo + missing dist
+# makes tsc -b skip emitting, so it must be excluded alongside dist.
+**/node_modules
+**/.git
+**/cdk.out
+**/.next
+**/dist
+**/*.tsbuildinfo
+**/.claude
+**/dynamodb-local-metadata.json

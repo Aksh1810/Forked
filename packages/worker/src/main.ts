@@ -1,4 +1,4 @@
-import { PINNED_ENGINE_VERSION } from '@blunderfarm/shared'
+import { PINNED_ENGINE_VERSION } from '@forked/shared'
 import { makeDeps, resolveQueueUrl } from './db.js'
 import { loadConfig } from './env.js'
 import { log } from './log.js'

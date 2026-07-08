@@ -1,0 +1,496 @@
+/* Design tokens, the single source of truth for every screen. Colors are
+   never extended; data colors are for charts, chips, and eval markers only,
+   never chrome. */
+:root {
+  --void: #0b0c10;
+  --surface: #14161c;
+  --line: #262a33;
+  --bone: #e8e4d9;
+  --muted: #8a8d94;
+  --blunder: #e5443d;
+  --mistake: #e58f3c;
+  --inaccuracy: #e5c13d;
+  --best: #59a96a;
+  --display-size: clamp(2.5rem, 1.4rem + 4.4vw, 5rem);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--void);
+  color: var(--bone);
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 100dvh;
+}
+
+a {
+  color: var(--blunder);
+  text-underline-offset: 3px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--blunder);
+  outline-offset: 2px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.display {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* One centered column: 640px for flow pages. */
+.flow {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 20px 48px;
+}
+
+.site-header {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.wordmark {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bone);
+  text-decoration: none;
+}
+
+.headline {
+  font-size: var(--display-size);
+  font-weight: 700;
+  line-height: 1.05;
+  margin: 12vh 0 0.5rem;
+}
+
+.headline .qq {
+  color: var(--blunder);
+}
+
+.sub {
+  color: var(--muted);
+  margin: 0 0 2rem;
+}
+
+.field,
+.cta {
+  min-height: 44px; /* tap-target floor */
+  border-radius: 8px;
+  width: 100%;
+}
+
+.field {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 10px 14px;
+}
+
+.field::placeholder {
+  color: var(--muted);
+}
+
+.cta {
+  /* Darker than --blunder on purpose: white text on #e5443d is 4.01:1, just
+     under the 4.5:1 floor. The token itself stays put because red ON void
+     needs the brighter value for its own contrast. */
+  background: #d63a33;
+  color: #fff;
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.cta:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.link-button {
+  display: block;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px 0;
+  min-height: 44px;
+  color: var(--muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.chip-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--bone);
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 0.9375rem;
+}
+
+.inline-error {
+  color: var(--blunder);
+  margin: 10px 0 0;
+}
+
+.expand-row {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.range-row {
+  display: flex;
+  gap: 10px;
+}
+
+.range-row label {
+  flex: 1;
+  color: var(--muted);
+  font-size: 0.875rem;
+  display: grid;
+  gap: 4px;
+}
+
+.ticker {
+  color: var(--muted);
+  margin-top: 3rem;
+  min-height: 1.5rem;
+}
+
+.footer {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin-top: 4rem;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* Progress page */
+.progress-main {
+  min-height: calc(100dvh - 80px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+/* The eval bar: the one universal progress and loading element. Light fill
+   on a pure black track. */
+.eval-bar {
+  height: 12px;
+  background: #000;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.eval-bar-fill {
+  height: 100%;
+  background: var(--bone);
+  transition: width 600ms ease-out;
+}
+
+.big-counter {
+  font-size: clamp(2rem, 1rem + 4vw, 3.25rem);
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.counter-label {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.status-line {
+  color: var(--bone);
+  min-height: 1.5rem;
+  margin: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.chip {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+}
+
+.chip .res-w {
+  color: var(--best);
+}
+
+.chip .res-l {
+  color: var(--mistake);
+}
+
+.chip .res-d,
+.chip .res-q {
+  color: var(--muted);
+}
+
+.quiet {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.failures {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.failures li {
+  color: var(--muted);
+  font-size: 0.875rem;
+  border-left: 2px solid var(--line);
+  padding-left: 10px;
+}
+
+/* Dashboard: 1080px grid */
+.dash {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 20px 64px;
+}
+
+.dash-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 24px;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--surface);
+  min-width: 0;
+}
+
+.panel-wide {
+  grid-column: 1 / -1;
+}
+
+.panel-title {
+  font-size: 0.9375rem;
+  color: var(--muted);
+  margin: 0 0 12px;
+  font-weight: 500;
+}
+
+.mistake-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.mistake-card {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+
+.game-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.game-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.game-table td {
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.res-w {
+  color: var(--best);
+}
+.res-l {
+  color: var(--mistake);
+}
+.res-d,
+.res-q {
+  color: var(--muted);
+}
+
+/* Browse list */
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.month-nav .current {
+  color: var(--bone);
+  font-size: 0.9375rem;
+}
+
+.chip-button:disabled,
+.row-analyze:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.row-analyze {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--bone);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 720px) {
+  .dash-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Per-game report */
+.report .move-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 2px;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+
+.move-cell {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--bone);
+  min-height: 44px;
+}
+
+.move-selected {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.chip-mark {
+  margin-left: 4px;
+  font-size: 0.8em;
+}
+.chip-mark.blunder {
+  color: var(--blunder);
+}
+.chip-mark.mistake {
+  color: var(--mistake);
+}
+.chip-mark.inaccuracy {
+  color: var(--inaccuracy);
+}
+.chip-mark.book {
+  color: var(--muted);
+}
+
+.move-detail {
+  border-left: 2px solid var(--line);
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eval-bar-fill {
+    transition: none;
+  }
+}
+
+/* Leaderboard */
+.tab-row {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.tab-row a[aria-current='page'] {
+  background: var(--bone);
+  color: var(--void);
+  border-color: var(--bone);
+}
+.remove-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  max-width: 420px;
+  margin-top: 12px;
+}
+.remove-row .field {
+  flex: 1;
+}
+
+/* Wide tables pan inside their own scroll container; the page itself never
+   scrolls sideways. */
+.table-scroll {
+  overflow-x: auto;
+}
+.table-scroll .game-table {
+  min-width: 520px;
+}

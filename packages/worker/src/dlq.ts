@@ -1,4 +1,4 @@
-import type { GameTask } from '@blunderfarm/shared'
+import type { GameTask } from '@forked/shared'
 import { executeCompletion } from './completion.js'
 import type { Deps } from './db.js'
 import { tryFinalize } from './finalize.js'

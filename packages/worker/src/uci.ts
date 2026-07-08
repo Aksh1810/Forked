@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createInterface, type Interface } from 'node:readline'
-import type { Eval } from '@blunderfarm/shared'
+import type { Eval } from '@forked/shared'
 
 export class EngineTimeoutError extends Error {
   constructor(message: string) {
@@ -14,6 +14,11 @@ export class EngineTimeoutError extends Error {
 // would collide under the same content address. It is deliberately not
 // configurable.
 const HASH_MB = 64
+
+// First spawn in a fresh Lambda sandbox pages the engine binary in over
+// the network (lazy container-image loading); uciok can take >10s cold.
+// Normal case is milliseconds, so a generous ceiling costs nothing.
+const BOOT_TIMEOUT_MS = 60_000
 
 export interface EngineOptions {
   enginePath?: string
@@ -78,7 +83,7 @@ export class Engine {
     proc.on('close', () => this.failWaiter(new Error('engine process exited')))
 
     this.send('uci')
-    await this.waitFor((l) => l === 'uciok', 10_000, 'uciok', (l) => {
+    await this.waitFor((l) => l === 'uciok', BOOT_TIMEOUT_MS, 'uciok', (l) => {
       if (l.startsWith('id name ')) this.version = l.slice('id name '.length).trim()
     })
     // Determinism contract: single thread, fixed hash, MultiPV 2, node-count
@@ -87,7 +92,7 @@ export class Engine {
     this.send('setoption name Threads value 1')
     this.send(`setoption name Hash value ${HASH_MB}`)
     this.send('setoption name MultiPV value 2')
-    await this.ready(10_000)
+    await this.ready(BOOT_TIMEOUT_MS)
   }
 
   // Analysis of a game always starts from ucinewgame (which clears the hash

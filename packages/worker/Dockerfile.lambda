@@ -1,0 +1,56 @@
+# Lambda worker image. Build from the repository root:
+#   docker build -f packages/worker/Dockerfile.lambda -t forked-worker-lambda .
+#
+# Deliberately NOT the AWS AL2023 base image: its glibc 2.34 cannot run the
+# pinned stockfish-ubuntu-x86-64-avx2 binary (needs 2.35). bookworm ships
+# 2.36 and the container worker image already proves the combination in CI.
+# The aws-lambda-ric runtime interface client makes any image Lambda-callable.
+#
+# Stockfish is GPLv3 (see /NOTICE inside the image). It is downloaded as the
+# pinned official release binary at build time, never vendored into this
+# repository, and runs strictly as a separate process over UCI.
+
+FROM node:20-bookworm-slim AS build
+# Toolchain for aws-lambda-ric's native build (node-gyp + libcurl).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  g++ make cmake unzip python3 libcurl4-openssl-dev autoconf automake libtool xz-utils \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.base.json tsconfig.json ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/worker/package.json packages/worker/
+RUN npm ci -w packages/worker --include-workspace-root \
+  && npm install --no-save aws-lambda-ric@4
+COPY packages/shared packages/shared
+COPY packages/worker packages/worker
+RUN npx tsc -b packages/shared packages/worker
+
+FROM node:20-bookworm-slim
+# PINNED Stockfish release, identical to the container worker's block.
+ARG SF_VERSION=sf_18
+ARG SF_ASSET=stockfish-ubuntu-x86-64-avx2
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && curl -fsSL -o /tmp/sf.tar "https://github.com/official-stockfish/Stockfish/releases/download/${SF_VERSION}/${SF_ASSET}.tar" \
+  && tar -xf /tmp/sf.tar -C /tmp \
+  && mv "/tmp/stockfish/${SF_ASSET}" /usr/local/bin/stockfish \
+  && chmod +x /usr/local/bin/stockfish \
+  && rm -rf /tmp/sf.tar /tmp/stockfish \
+  && apt-get purge -y curl \
+  && apt-get autoremove -y \
+  && rm -rf /var/lib/apt/lists/*
+LABEL org.opencontainers.image.title="forked-worker-lambda"
+LABEL org.opencontainers.image.licenses="MIT AND GPL-3.0-only"
+LABEL org.opencontainers.image.description="forked analysis worker on Lambda; bundles the GPLv3 Stockfish engine as a separate process"
+COPY docs/NOTICE /NOTICE
+# aws-lambda-ric resolves the handler module relative to LAMBDA_TASK_ROOT,
+# which the Lambda service hard-sets to /var/task for container images.
+WORKDIR /var/task
+COPY --from=build /app/node_modules node_modules
+COPY --from=build /app/packages/shared/dist packages/shared/dist
+COPY --from=build /app/packages/shared/package.json packages/shared/
+COPY --from=build /app/packages/worker/dist packages/worker/dist
+COPY --from=build /app/packages/worker/package.json packages/worker/
+ENV STOCKFISH_PATH=/usr/local/bin/stockfish
+ENTRYPOINT ["npx", "aws-lambda-ric"]
+CMD ["packages/worker/dist/lambda.handler"]

@@ -7,7 +7,7 @@ import {
   parseGamePgn,
   type EngineRecord,
   type GameRecord,
-} from '@blunderfarm/shared'
+} from '@forked/shared'
 import { analyzeGame } from '../src/analyze.js'
 import { Engine } from '../src/uci.js'
 

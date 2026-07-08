@@ -1,5 +1,5 @@
 {
-  "name": "@blunderfarm/worker",
+  "name": "@forked/worker",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,6 +8,6 @@
     "@aws-sdk/client-dynamodb": "^3.1079.0",
     "@aws-sdk/client-sqs": "^3.1079.0",
     "@aws-sdk/lib-dynamodb": "^3.1079.0",
-    "@blunderfarm/shared": "*"
+    "@forked/shared": "*"
   }
 }

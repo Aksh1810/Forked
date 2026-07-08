@@ -8,7 +8,7 @@ import {
   type EngineRecord,
   type Eval,
   type PlyAnalysis,
-} from '@blunderfarm/shared'
+} from '@forked/shared'
 import { Engine, EngineTimeoutError } from './uci.js'
 
 export const DEFAULT_NODE_BUDGET = 600_000

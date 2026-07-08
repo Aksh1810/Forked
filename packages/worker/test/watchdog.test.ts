@@ -24,7 +24,7 @@ afterEach(() => {
 })
 
 test('a wedged engine is killed, respawned, and the game retried from scratch', async () => {
-  dir = mkdtempSync(join(tmpdir(), 'blunderfarm-wedge-'))
+  dir = mkdtempSync(join(tmpdir(), 'forked-wedge-'))
   process.env.WEDGE_MARKER = join(dir, 'marker')
   process.env.CMD_LOG = join(dir, 'cmd.log')
 

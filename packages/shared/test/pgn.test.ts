@@ -18,6 +18,15 @@ test('scholars mate parses: moves, headers, terminal checkmate', () => {
   expect(g.clocks).toEqual([null, null, null, null, null, null, null])
 })
 
+test('a player name of the literal string "undefined" normalizes to a placeholder', () => {
+  const pgn =
+    '[White "undefined"]\n[Black "erik"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 1-0\n'
+  const g = parseGamePgn(pgn)
+  if (!g.ok) throw new Error(g.message)
+  expect(g.white.name).toBe('?')
+  expect(g.black.name).toBe('erik')
+})
+
 test('%clk comments are extracted per ply into game data', () => {
   const g = parseGamePgn(fixture('same-moves-a.pgn'))
   if (!g.ok) throw new Error(g.message)
@@ -72,4 +81,21 @@ test('finalStatus replays uci moves and flags checkmate', () => {
   expect(finalStatus(['e2e4', 'e7e5', 'f1c4', 'b8c6', 'd1h5', 'g8f6', 'h5f7'])).toBe('checkmate')
   expect(finalStatus(['e2e4', 'e7e5'])).toBeNull()
   expect(() => finalStatus(['e2e4', 'e2e5'])).toThrow(/ply 2/)
+})
+
+test('a game past 600 plies is rejected as too-long, never analyzed', () => {
+  // 200 knight shuffles = 800 plies of legal chess (move numbers are optional).
+  const shuffle = 'Nf3 Nf6 Ng1 Ng8 '.repeat(200)
+  const g = parseGamePgn(`[White "a"]\n[Black "b"]\n\n${shuffle} *`)
+  expect(g.ok).toBe(false)
+  if (!g.ok) expect(g.code).toBe('too-long')
+})
+
+test('oversized header fields are truncated at parse, not stored', () => {
+  const g = parseGamePgn(
+    `[White "${'x'.repeat(5000)}"]\n[Black "b"]\n[TimeControl "${'9'.repeat(500)}"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *`,
+  )
+  if (!g.ok) throw new Error(g.message)
+  expect(g.white.name.length).toBeLessThanOrEqual(60)
+  expect(g.timeControl.length).toBeLessThanOrEqual(32)
 })

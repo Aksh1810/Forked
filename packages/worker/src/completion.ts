@@ -6,7 +6,7 @@ import {
   mergeRing,
   type GameAggContribution,
   type RingEntry,
-} from '@blunderfarm/shared'
+} from '@forked/shared'
 import type { Deps } from './db.js'
 
 export type CompletionOutcome =
