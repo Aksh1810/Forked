@@ -11,6 +11,7 @@ import { bumpRate, ingest } from './ingest.js'
 import { getGameReport, getJobView, getUserGames } from './status.js'
 
 const USERNAME_RE = /^[a-zA-Z0-9_-]{1,50}$/
+const MONTH_RE = /^\d{4}-\d{2}$/
 // Job ids are UUIDs we mint; game ids are chess.com uuids or pgn-N. Anything
 // else 404s before touching storage (and before oversized strings reach a key).
 const ID_RE = /^[a-zA-Z0-9-]{1,64}$/
@@ -71,8 +72,12 @@ export function makeApp(
     if (!USERNAME_RE.test(username)) {
       return c.json({ ok: false, code: 'bad-request' }, 400)
     }
+    const month = c.req.query('month')
+    if (month !== undefined && !MONTH_RE.test(month)) {
+      return c.json({ ok: false, code: 'bad-request' }, 400)
+    }
     try {
-      return c.json(await getUserGames(chesscom, username, c.req.query('month')))
+      return c.json(await getUserGames(chesscom, username, month))
     } catch (e) {
       if (e instanceof UserNotFoundError) return c.json({ ok: false, code: 'user-not-found' }, 404)
       return c.json({ ok: false, code: 'upstream' }, 502)
@@ -80,6 +85,9 @@ export function makeApp(
   })
 
   app.get('/job/:id', async (c) => {
+    // Progress polling: cache per-client only, and only for a second (the
+    // client polls faster than that, but stampedes/back-buttons get a freebie).
+    c.header('Cache-Control', 'private, max-age=1')
     const id = c.req.param('id')
     if (!ID_RE.test(id)) return c.json({ ok: false, code: 'not-found' }, 404)
     const view = await getJobView(deps, id, c.req.query('failures') === '1')
@@ -98,6 +106,8 @@ export function makeApp(
   // Query serves both tabs. Rank floor is 50 games; opted-out users never
   // appear.
   app.get('/leaderboard', async (c) => {
+    // Shared across all visitors; the CDN can serve stale for 5min while revalidating.
+    c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
     const out = await deps.ddb.send(
       new QueryCommand({
         TableName: deps.table,
@@ -172,6 +182,7 @@ export function makeApp(
 
   // Landing-page ticker: the one all-time counter item.
   app.get('/metrics', async (c) => {
+    c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
     const out = await deps.ddb.send(
       new GetCommand({ TableName: deps.table, Key: metricsKey('TOTAL') }),
     )

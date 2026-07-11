@@ -1,6 +1,6 @@
 import { Chess, castlingSide, normalizeMove } from 'chessops/chess'
 import { parsePgn, type Game, type PgnNodeData } from 'chessops/pgn'
-import { parseSan } from 'chessops/san'
+import { makeSanAndPlay, parseSan } from 'chessops/san'
 import { makeUci, parseUci } from 'chessops/util'
 import type { Move } from 'chessops/types'
 import { matchOpening } from './openings.js'
@@ -135,6 +135,32 @@ function parseGame(game: Game<PgnNodeData>): ParsedGame | PgnRejection {
     openingName: opening?.name ?? null,
     terminal: pos.isCheckmate() ? 'checkmate' : pos.isStalemate() ? 'stalemate' : null,
   }
+}
+
+// Replays `prefix` then `uciMoves` from the standard start and returns the SAN
+// for each of `uciMoves` (not `prefix`). Same replay pattern as `finalStatus`
+// and `fenBeforePly`: parseUci + normalizeMove so standard-UCI castling
+// (e1g1) round-trips through chessops' king-takes-rook internal form. Used
+// for both the game move list (`sanMoves(record.uciMoves)`) and a PV line
+// (`sanMoves(p.pv, record.uciMoves.slice(0, p.ply - 1))`). An unreplayable
+// move (shouldn't happen; these lists already replayed cleanly at ingest)
+// stops the walk and returns whatever SANs were produced so far.
+export function sanMoves(uciMoves: readonly string[], prefix: readonly string[] = []): string[] {
+  const pos = Chess.default()
+  for (const u of prefix) {
+    const raw = parseUci(u)
+    const move = raw && normalizeMove(pos, raw)
+    if (!move || !pos.isLegal(move)) return []
+    pos.play(move)
+  }
+  const out: string[] = []
+  for (const u of uciMoves) {
+    const raw = parseUci(u)
+    const move = raw && normalizeMove(pos, raw)
+    if (!move || !pos.isLegal(move)) break
+    out.push(makeSanAndPlay(pos, move))
+  }
+  return out
 }
 
 // Replays a UCI move list from the standard start, throwing on any illegal

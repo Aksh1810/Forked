@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { normalizeUsername } from '@forked/shared'
 import { copy } from '../copy'
 import { getPositionsJudged, postIngest } from '../lib/api'
 
@@ -16,13 +17,29 @@ export default function Landing() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const u = normalizeUsername(username)
+    if (!u) {
+      setError(copy.browseHint)
+      return
+    }
+    setError(null)
+    router.push(`/u/${encodeURIComponent(u)}`)
+  }
+
+  async function submitWrapped(e: React.FormEvent) {
     e.preventDefault()
     if (busy) return
+    const u = username.trim() ? normalizeUsername(username) : null
+    if (username.trim() && !u) {
+      setError(copy.browseHint)
+      return
+    }
     setError(null)
     setBusy(true)
     const res = await postIngest({
-      username: username.trim() || undefined,
+      username: u ?? undefined,
       pgn: pgn.trim() || undefined,
       from: from || undefined,
       to: to || undefined,
@@ -54,69 +71,63 @@ export default function Landing() {
           autoCorrect="off"
           spellCheck={false}
         />
-        <button className="cta" type="submit" disabled={busy}>
-          {busy ? copy.ctaBusy : copy.cta}
+        <button className="cta" type="submit">
+          {copy.cta}
         </button>
         {error && (
           <p className="inline-error" role="alert">
             {error}
           </p>
         )}
+        <Link href="/u/erik" className="link-button">
+          {copy.demoLink}
+        </Link>
         <button
           type="button"
           className="link-button"
           aria-expanded={expanded}
           onClick={() => setExpanded((v) => !v)}
         >
-          {copy.expandToggle}
-        </button>
-        {expanded && (
-          <div className="expand-row">
-            <textarea
-              className="field"
-              rows={5}
-              placeholder={copy.pgnPlaceholder}
-              aria-label={copy.pgnPlaceholder}
-              value={pgn}
-              onChange={(e) => setPgn(e.target.value)}
-            />
-            <div className="range-row">
-              <label>
-                From
-                <input
-                  className="field"
-                  type="month"
-                  value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                />
-              </label>
-              <label>
-                To
-                <input
-                  className="field"
-                  type="month"
-                  value={to}
-                  onChange={(e) => setTo(e.target.value)}
-                />
-              </label>
-            </div>
-          </div>
-        )}
-        <button
-          type="button"
-          className="link-button"
-          onClick={() => {
-            const u = username.trim()
-            if (!u) {
-              setError(copy.browseHint)
-              return
-            }
-            router.push(`/u/${encodeURIComponent(u)}`)
-          }}
-        >
-          {copy.browseToggle}
+          {copy.wrappedToggle}
         </button>
       </form>
+      <p className="quiet">{copy.privacyLine}</p>
+
+      {expanded && (
+        <form onSubmit={submitWrapped} className="expand-row">
+          <textarea
+            className="field"
+            rows={5}
+            placeholder={copy.pgnPlaceholder}
+            aria-label={copy.pgnPlaceholder}
+            value={pgn}
+            onChange={(e) => setPgn(e.target.value)}
+          />
+          <div className="range-row">
+            <label>
+              From
+              <input
+                className="field"
+                type="month"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </label>
+            <label>
+              To
+              <input
+                className="field"
+                type="month"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </label>
+          </div>
+          <button className="cta" type="submit" disabled={busy}>
+            {busy ? copy.ctaBusy : copy.wrappedCta}
+          </button>
+        </form>
+      )}
 
       <Ticker />
       <p>

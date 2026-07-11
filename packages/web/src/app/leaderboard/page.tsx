@@ -69,7 +69,9 @@ export default async function Leaderboard({
                     <td className="mono">{u.accuracy.toFixed(1)}%</td>
                     <td className="mono quiet">{u.games}</td>
                     <td className="quiet">
-                      <span className="mono">{u.archetype.mark}</span> {u.archetype.name}
+                      {/* Name first, mark after (matches Card.tsx/Story.tsx): a
+                          leading "!"/"??" glyph before the name read like a typo. */}
+                      {u.archetype.name} <span className="mono" style={{ color: 'var(--accent-text)' }}>{u.archetype.mark}</span>
                     </td>
                   </tr>
                 ))}
@@ -77,6 +79,7 @@ export default async function Leaderboard({
             </table>
             </div>
           )}
+          {board && board.users.length > 0 && <p className="quiet">{copy.leader.archetypeNote}</p>}
         </>
       )}
 

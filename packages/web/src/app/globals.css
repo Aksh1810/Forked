@@ -8,10 +8,30 @@
   --bone: #e8e4d9;
   --muted: #8a8d94;
   --blunder: #e5443d;
+  /* Body-size red text/links need a lighter value than --blunder to clear
+     4.5:1 on --void; --blunder itself stays put for display-size text (the
+     headline's "??") which only needs 3:1. */
+  --accent-text: #e85d55;
   --mistake: #e58f3c;
   --inaccuracy: #e5c13d;
   --best: #59a96a;
   --display-size: clamp(2.5rem, 1.4rem + 4.4vw, 5rem);
+
+  /* Board squares, chess.com-style. */
+  --sq-light: #ebecd0;
+  --sq-dark: #739552;
+  /* Move-classification colors used on board badges and move-list marks
+     (distinct tokens from --blunder/--mistake/--inaccuracy above, which are
+     the app's general-chrome palette: those tint links and focus rings, these
+     are reserved for classification UI only). */
+  --cls-brilliant: #26c2a3;
+  --cls-great: #5c8bb0;
+  --cls-excellent: #96bc4b;
+  --cls-good: #95af8a;
+  --cls-inaccuracy: #f7c631;
+  --cls-mistake: #ffa459;
+  --cls-miss: #ff7769;
+  --cls-blunder: #fa412d;
 }
 
 * {
@@ -24,6 +44,12 @@ body {
   padding: 0;
 }
 
+/* Reserve the scrollbar gutter so content doesn't shift sideways when the
+   page height crosses the viewport (e.g. summary card -> coach card swap). */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background: var(--void);
   color: var(--bone);
@@ -34,12 +60,12 @@ body {
 }
 
 a {
-  color: var(--blunder);
+  color: var(--accent-text);
   text-underline-offset: 3px;
 }
 
 :focus-visible {
-  outline: 2px solid var(--blunder);
+  outline: 2px solid var(--bone);
   outline-offset: 2px;
 }
 
@@ -161,7 +187,7 @@ textarea {
 }
 
 .inline-error {
-  color: var(--blunder);
+  color: var(--accent-text);
   margin: 10px 0 0;
 }
 
@@ -220,6 +246,24 @@ textarea {
   height: 100%;
   background: var(--bone);
   transition: width 600ms ease-out;
+}
+
+/* Indeterminate sweep for a single-game wait: reuses the .eval-bar track. */
+.analyzing-sweep {
+  height: 100%;
+  width: 40%;
+  border-radius: 6px;
+  background: var(--bone);
+  animation: sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
 }
 
 .big-counter {
@@ -361,28 +405,63 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 
-.res-w {
+/* Date and result cells never wrap (a wrapped "11 Jul / 26" or a chip with
+   its color dot pushed to a second line reads as broken); opening names are
+   the one column allowed to wrap. */
+.game-table td:nth-child(1),
+.game-table td:nth-child(3) {
+  white-space: nowrap;
+}
+
+/* Result pill: color AND words, so W/L doesn't collapse to a color-only
+   signal. Sized for the table's chip column and the mobile card alike. */
+.res-chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.res-chip.res-w {
+  background: color-mix(in srgb, var(--best) 18%, transparent);
   color: var(--best);
 }
-.res-l {
-  color: var(--mistake);
+.res-chip.res-l {
+  background: color-mix(in srgb, var(--cls-blunder) 18%, transparent);
+  color: var(--cls-blunder);
 }
-.res-d,
-.res-q {
+.res-chip.res-d,
+.res-chip.res-q {
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
   color: var(--muted);
 }
 
-/* Browse list */
-.month-nav {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 20px;
+/* Color-played square: white/black square the user played that game, next to
+   the date/opening/moves line. */
+.color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+.color-dot-white {
+  background: #ebecd0;
+}
+.color-dot-black {
+  background: #3a3a3a;
+  border: 1px solid #777;
 }
 
-.month-nav .current {
-  color: var(--bone);
-  font-size: 0.9375rem;
+.num-col {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Browse list */
+tr.row-click {
+  cursor: pointer;
 }
 
 .chip-button:disabled,
@@ -393,6 +472,10 @@ textarea {
 
 .row-analyze {
   min-height: 44px;
+  /* Fixed width so the column never reflows when a row switches from
+     "Analyze" to the spinner + "Analyzing...": 15ch comfortably fits the
+     longer string plus its glyph. */
+  width: 15ch;
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -400,6 +483,111 @@ textarea {
   color: var(--bone);
   cursor: pointer;
   font-size: 0.875rem;
+  text-align: center;
+}
+
+.spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* B5: sticky month divider, table variant — a plain row that spans every
+   column and pins to the top of the viewport as the list scrolls past it
+   (the page, not .table-scroll, is the scrolling ancestor here). Opaque
+   background so rows scrolling underneath don't show through. */
+.month-divider {
+  position: sticky;
+  top: 0;
+  background: var(--void);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+  z-index: 1;
+}
+
+/* B5: sticky month divider, mobile card variant. */
+.month-divider-li {
+  position: sticky;
+  top: 0;
+  background: var(--void);
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 6px 12px;
+  z-index: 1;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Mobile row-cards: hidden by default, swapped in for the table under
+   640px. Whole card is the tap target (analyze on click); rejected/busy
+   rows render inert content in the same slot instead of the result chip. */
+.game-cards {
+  display: none;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.game-card {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--bone);
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-card:disabled {
+  cursor: default;
+}
+
+.game-card-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.game-card-row2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+/* QA3: row2 is a flex container, so ellipsis on the row itself never
+   triggers (flex items don't overflow their line the way inline text does).
+   Only the opening name — the one field of unpredictable length — shrinks
+   and truncates; the date/dot/move-count stay fixed-size and visible. */
+.game-card-row2 > :not(.game-card-opening) {
+  flex: none;
+}
+
+.game-card-opening {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  /* QA1: the mobile hide is scoped to .games-table-scroll (below), not every
+     .table-scroll — the leaderboard shares the class with no card fallback
+     and must stay visible, panning horizontally instead. */
+  .game-cards {
+    display: block;
+  }
 }
 
 @media (max-width: 720px) {
@@ -408,18 +596,115 @@ textarea {
   }
 }
 
-/* Per-game report */
-.report .move-list {
+/* Per-game review: eval bar + board on the left, graph/coach/moves panel on
+   the right; single column on mobile. */
+.review {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 2px;
+  /* Fixed panel width: a content-sized column reflowed the whole board every
+     time the coach text changed length. */
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 24px;
+  align-items: start;
+  margin: 12px 0;
+}
+
+.review-left {
+  min-width: 0;
+}
+
+.player-row {
+  margin: 6px 0;
+}
+
+.board-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+/* The vertical game eval bar (distinct from .eval-bar, the loading bar). */
+.game-eval-bar {
+  position: relative;
+  width: 28px;
+  flex: none;
+  display: flex;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.game-eval-bar-black {
+  background: #3c3a36;
+  transition: height 0.2s ease;
+}
+
+.game-eval-bar-white {
+  background: #f0f0f0;
+  transition: height 0.2s ease;
+}
+
+.game-eval-bar-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.review-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-toolbar .chip-button {
+  flex: 1;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.move-pairs {
   list-style: none;
   padding: 0;
-  margin: 12px 0 0;
+  margin: 0;
+}
+
+.review-panel .move-pairs {
+  height: 340px;
+  overflow-y: auto;
+}
+
+.move-pair {
+  display: grid;
+  grid-template-columns: 2.5em 1fr 1fr;
+  gap: 2px;
+  align-items: center;
+}
+
+.move-variation {
+  padding-left: 2.5em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .move-cell {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   text-align: left;
   background: none;
   border: 1px solid transparent;
@@ -435,32 +720,228 @@ textarea {
   background: var(--surface);
 }
 
-.chip-mark {
-  margin-left: 4px;
-  font-size: 0.8em;
-}
-.chip-mark.blunder {
-  color: var(--blunder);
-}
-.chip-mark.mistake {
-  color: var(--mistake);
-}
-.chip-mark.inaccuracy {
-  color: var(--inaccuracy);
-}
-.chip-mark.book {
-  color: var(--muted);
+/* Coach card: a light card (chess.com puts the coach sentence on a bone
+   background, not the dark chrome) with a tier icon, headline, and eval
+   chip; the summary card (pre-review) reuses the same shell. */
+.coach-card {
+  border-radius: 10px;
+  background: var(--bone);
+  color: #1a1a1a;
+  padding: 10px 12px;
+  min-height: 74px;
+  box-sizing: border-box;
+  margin: 0;
 }
 
-.move-detail {
-  border-left: 2px solid var(--line);
-  padding: 8px 12px;
-  margin: 8px 0;
+/* The per-move card is a FIXED-height slot (the summary card is exempt: it
+   only shows before stepping starts). Measured worst case across a full game
+   is 109px (headline + eval + motif + "Best was ..." pv line); anything rarer
+   that exceeds the slot scrolls inside it. Without this the card flips
+   74/93/98/109px move to move and the buttons/graph/toolbar below bounce on
+   every Next press. */
+.coach-card:not(.summary-card) {
+  height: 112px;
+  overflow-y: auto;
+}
+
+.coach-card.quiet {
+  color: #55524a;
+  font-size: 0.875rem;
+}
+
+.coach-outcome {
+  margin-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  padding-top: 6px;
+}
+
+.coach-outcome p {
+  margin: 0 0 2px;
+  font-weight: 600;
+}
+
+/* Signature moment: a brilliant/great board badge pops in; a blunder briefly
+   flashes the coach card border. Both are rare (exactly these tiers) and
+   both disabled under reduced motion, below. */
+@keyframes badge-pop {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.badge-pop {
+  animation: badge-pop 250ms ease-out;
+}
+
+@keyframes coach-flash {
+  0% {
+    box-shadow: 0 0 0 3px var(--cls-blunder);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+.coach-flash {
+  animation: coach-flash 600ms ease-out;
+}
+
+/* Keyboard-step hint under the review's nav toolbar; meaningless on a touch
+   device, where there are no arrow keys. */
+@media (pointer: coarse) {
+  .keyboard-hint {
+    display: none;
+  }
+}
+
+/* Games list loading skeleton: 8 shimmer bars in place of the bare "loading"
+   line, so the page has a sense of place before the first month lands. */
+.skeleton-list {
+  display: grid;
+  gap: 8px;
+}
+
+.skeleton-row {
+  height: 44px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--surface) 25%, var(--line) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.coach-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coach-head strong {
+  flex: 1;
+}
+
+.coach-eval {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-weight: 700;
+}
+
+.coach-pv {
+  margin-top: 4px;
+}
+
+.next-button {
+  flex: 1;
+  background: #81b64c;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: 700;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.next-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.summary-heads {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  margin-bottom: 4px;
+}
+
+.summary-table {
+  width: 100%;
+  margin-top: 8px;
+  font-size: 0.8125rem;
+}
+
+.summary-table td {
+  padding: 3px 0;
+}
+
+.summary-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  .review {
+    grid-template-columns: 1fr;
+  }
+  /* Mobile order: board, then coach/summary card, buttons, graph, move
+     list, nav toolbar (B3: graph reads above the move list everywhere). */
+  .review-panel > .coach-card {
+    order: 0;
+  }
+  .review-panel .button-row {
+    order: 1;
+  }
+  .review-panel .review-graph {
+    order: 2;
+  }
+  .review-panel .move-pairs {
+    order: 3;
+    height: auto;
+    max-height: none;
+    overflow-y: visible;
+  }
+  .review-panel .nav-toolbar {
+    order: 4;
+    /* B1: pin the step buttons under the thumb instead of scrolling away
+       past a long move list. */
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding: 8px 0;
+  }
+  .review-panel .keyboard-hint {
+    order: 4;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .eval-bar-fill {
+  .eval-bar-fill,
+  .game-eval-bar-black,
+  .game-eval-bar-white {
     transition: none;
+  }
+  .spin {
+    animation: none;
+  }
+  .analyzing-sweep {
+    animation: none;
+    width: 100%;
+    transform: none;
+  }
+  .badge-pop,
+  .coach-flash,
+  .skeleton-row {
+    animation: none;
+  }
+  .skeleton-row {
+    background: var(--surface);
   }
 }
 
@@ -493,4 +974,62 @@ textarea {
 }
 .table-scroll .game-table {
   min-width: 520px;
+}
+
+/* QA1: only the games list's table wrapper falls back to the .game-cards
+   list on mobile — the leaderboard shares .table-scroll but has no card
+   fallback, so it must stay visible and pan horizontally instead. */
+@media (max-width: 640px) {
+  .games-table-scroll {
+    display: none;
+  }
+}
+
+/* B2: a shared hover/pressed elevation overlay, desktop pointer only — a
+   touch device has no hover state to fake. Each selector mixes over ITS OWN
+   current background (color-mix can't read the effective stack), so a
+   surface-backed chip and a transparent-backed row/card each lighten from
+   where they actually sit. */
+@media (hover: hover) {
+  .chip-button:not(:disabled):hover {
+    background: color-mix(in srgb, var(--bone) 6%, var(--surface));
+  }
+  .chip-button:not(:disabled):active {
+    background: color-mix(in srgb, var(--bone) 12%, var(--surface));
+  }
+  tr.row-click:hover td {
+    background: color-mix(in srgb, var(--bone) 6%, var(--void));
+  }
+  .move-cell:hover {
+    background: color-mix(in srgb, var(--bone) 6%, var(--void));
+  }
+  .move-cell.move-selected:hover {
+    background: color-mix(in srgb, var(--bone) 6%, var(--surface));
+  }
+  .game-card:not(:disabled):hover {
+    background: color-mix(in srgb, var(--bone) 6%, var(--void));
+  }
+  .game-card:not(:disabled):active {
+    background: color-mix(in srgb, var(--bone) 12%, var(--void));
+  }
+}
+
+/* B9: the games list can run to hundreds of rows; skip layout/paint for
+   cards off-screen. contain-intrinsic-size matches the card's actual
+   min-height so scrollbar/scroll-position math stays accurate before a
+   card has ever been rendered. */
+.game-cards li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+}
+
+/* QA4: header/footer nav links sit at plain text line-height on mobile
+   (~18-20px tall) — pad them up to the 44px tap-target floor without
+   shifting surrounding layout (padding only, no negative margins). */
+@media (max-width: 640px) {
+  .site-header a,
+  .footer a {
+    display: inline-block;
+    padding: 12px 0;
+  }
 }

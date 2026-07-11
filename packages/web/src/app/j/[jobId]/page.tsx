@@ -26,20 +26,26 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
     }
   }, [job, jobId, router])
 
+  // C3: 2s while fresh, backing off to 5s once this job has been polling for
+  // over a minute — recursive setTimeout (not setInterval) so the delay can
+  // change mid-flight.
   useEffect(() => {
     if (terminal) return
     let stop = false
+    let timer: ReturnType<typeof setTimeout>
+    const startedAt = Date.now()
     async function poll() {
       const j = await getJob(jobId).catch(() => null)
       if (stop) return
       if (j) setJob(j)
       else setMissing(true)
+      if (stop) return
+      timer = setTimeout(poll, Date.now() - startedAt > 60_000 ? 5000 : 2000)
     }
     void poll()
-    const iv = setInterval(poll, 2000)
     return () => {
       stop = true
-      clearInterval(iv)
+      clearTimeout(timer)
     }
   }, [jobId, terminal])
 
@@ -104,6 +110,10 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
         </div>
       )}
 
+      {job.status === 'analyzing' && job.etaSeconds !== null && job.etaSeconds > 0 && (
+        <p className="quiet">{etaLine(job.etaSeconds)}</p>
+      )}
+
       {!terminal && <p className="status-line">{statusLine}</p>}
 
       {terminal && (
@@ -142,6 +152,12 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
       <p className="quiet">{copy.yourLink}</p>
     </main>
   )
+}
+
+// "about N min left" / "under a minute left" (item 3): rounds up so a job
+// with 1s remaining still reads as "about 1 min" rather than "0 min".
+function etaLine(sec: number): string {
+  return sec < 60 ? copy.progress.etaUnderMinute : copy.progress.etaMinutes(Math.ceil(sec / 60))
 }
 
 // Real throughput from the ring buffer: plies of every entry except the

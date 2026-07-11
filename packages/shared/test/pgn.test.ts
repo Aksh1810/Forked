@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
-import { finalStatus, parseGamePgn } from '../src/pgn.js'
+import { finalStatus, parseGamePgn, sanMoves } from '../src/pgn.js'
 import { cacheKey } from '../src/cache-key.js'
 
 const fixture = (name: string) =>
@@ -81,6 +81,24 @@ test('finalStatus replays uci moves and flags checkmate', () => {
   expect(finalStatus(['e2e4', 'e7e5', 'f1c4', 'b8c6', 'd1h5', 'g8f6', 'h5f7'])).toBe('checkmate')
   expect(finalStatus(['e2e4', 'e7e5'])).toBeNull()
   expect(() => finalStatus(['e2e4', 'e2e5'])).toThrow(/ply 2/)
+})
+
+test('sanMoves converts standard-UCI castling to O-O', () => {
+  const uci = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'f8c5', 'e1g1']
+  expect(sanMoves(uci)).toEqual(['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'O-O'])
+})
+
+test('sanMoves converts a capturing promotion, and check/mate suffixes', () => {
+  const uci = ['h2h4', 'g7g5', 'h4g5', 'h7h5', 'g5g6', 'h5h4', 'g6g7', 'h4h3', 'g7h8q']
+  expect(sanMoves(uci).at(-1)).toBe('gxh8=Q')
+
+  const mate = sanMoves(['e2e4', 'e7e5', 'f1c4', 'b8c6', 'd1h5', 'g8f6', 'h5f7'])
+  expect(mate.at(-1)).toBe('Qxf7#')
+})
+
+test('sanMoves replays a prefix for PV lines without including it in the output', () => {
+  const prefix = ['e2e4', 'e7e5']
+  expect(sanMoves(['g1f3', 'b8c6'], prefix)).toEqual(['Nf3', 'Nc6'])
 })
 
 test('a game past 600 plies is rejected as too-long, never analyzed', () => {

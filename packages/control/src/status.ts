@@ -3,6 +3,22 @@ import { cacheItemKey, gameKey, jobKey } from '@forked/shared'
 import type { Deps } from '@forked/worker'
 import type { ArchiveGame, ChessCom } from './chesscom.js'
 
+// Cheap ETA from data already on the job item: observed throughput so far
+// (done / elapsed) projected across the remaining games. No new storage -
+// just createdAt + the existing counters. null when there isn't enough
+// signal yet (not analyzing, or zero done so no rate to project).
+function etaSeconds(j: Record<string, unknown>, now: number): number | null {
+  if (j.status !== 'analyzing') return null
+  const total = Number(j.total ?? 0)
+  const done = Number(j.completed ?? 0) + Number(j.failed ?? 0)
+  const remaining = total - done
+  if (remaining <= 0) return 0
+  if (done <= 0) return null
+  const elapsedSec = (now - Date.parse(j.createdAt as string)) / 1000
+  if (!(elapsedSec > 0)) return null
+  return Math.round((remaining * elapsedSec) / done)
+}
+
 // Public job view for the progress page. The partial-aggregate object rides
 // along so the teaser slot has real data to draw from once Phase 4 turns it
 // on; nothing secret lives on a job item anyway (results are public by link).
@@ -26,6 +42,7 @@ export async function getJobView(
     ring: j.ring,
     agg: j.agg,
     createdAt: j.createdAt,
+    etaSeconds: etaSeconds(j, Date.now()),
     // Present once finalized; the single read model for story, cards, and OG.
     wrapped: j.wrapped ?? null,
   }
@@ -70,9 +87,18 @@ export async function getUserGames(
   month?: string,
 ): Promise<{ username: string; months: string[]; month: string | null; games: GameListRow[] }> {
   const uname = username.toLowerCase()
+  // A caller that already knows its month (every scroll step past the first)
+  // skips listMonths entirely - it's an uncached, serialized chess.com hit on
+  // every request otherwise. Completed months still resolve straight from the
+  // DynamoDB cache in chesscom.monthGames, zero upstream calls.
+  if (month) {
+    const games = (await chesscom.monthGames(uname, month)).map((g) => toRow(g, uname))
+    games.sort((a, b) => b.endTime - a.endTime)
+    return { username: uname, months: [], month, games }
+  }
   const months = await chesscom.listMonths(uname) // oldest first
   if (months.length === 0) return { username: uname, months, month: null, games: [] }
-  const picked = month && months.includes(month) ? month : months[months.length - 1]
+  const picked = months[months.length - 1]
   const games = (await chesscom.monthGames(uname, picked)).map((g) => toRow(g, uname))
   // Newest game first within the month.
   games.sort((a, b) => b.endTime - a.endTime)

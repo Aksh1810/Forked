@@ -10,8 +10,9 @@ export default function About() {
         About
       </h1>
       <p>
-        {BRAND_NAME} analyzes your entire chess.com history with a full engine and tells you,
-        with numbers, why you lose. It is free and open source.
+        {BRAND_NAME} shows every game from your chess.com history, and runs a full engine
+        breakdown on any one of them. It can also judge your whole history at once and hand you
+        a Wrapped-style story. It is free and open source.
       </p>
       <p>
         Results are public, reachable only by their unguessable link. The games themselves are

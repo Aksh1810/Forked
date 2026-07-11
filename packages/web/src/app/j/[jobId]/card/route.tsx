@@ -12,5 +12,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ jobId: s
   if (!job?.wrapped) return new Response('not finished', { status: 404 })
   const origin = process.env.NEXT_PUBLIC_SITE_ORIGIN ?? 'forked.local'
   void CARD_SIZES
-  return renderCard(job.wrapped, size, origin)
+  return renderCard(job.wrapped, size, origin, jobId)
 }

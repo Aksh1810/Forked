@@ -57,9 +57,9 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function renderCard(w: WrappedSummary, size: CardSize, origin: string): ImageResponse {
+export function renderCard(w: WrappedSummary, size: CardSize, origin: string, jobId: string): ImageResponse {
   const dim = CARD_SIZES[size]
-  const url = `${origin.replace(/^https?:\/\//, '')}/j/${w.username ?? ''}`.replace(/\/$/, '')
+  const url = `${origin.replace(/^https?:\/\//, '')}/j/${jobId}`.replace(/\/$/, '')
   return new ImageResponse(
     (
       <div

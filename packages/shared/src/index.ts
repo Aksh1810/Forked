@@ -66,8 +66,15 @@ export {
   type GameRecord,
 } from './schemas.js'
 export { winPctFromCp, whiteWinPct, moverWinPct } from './win.js'
-export { classifyWinPctSwing } from './classify.js'
-export { accuracyFromAvgLoss, gameAccuracies } from './accuracy.js'
+export {
+  classifyWinPctSwing,
+  enrichClassifications,
+  turningPoint,
+  moveMotif,
+  type Enriched,
+  type Motif,
+} from './classify.js'
+export { accuracyFromAvgLoss, gameAccuracies, phaseAccuracies } from './accuracy.js'
 export { cacheKey } from './cache-key.js'
 export { matchOpening, type OpeningMatch } from './openings.js'
 export {
@@ -75,7 +82,9 @@ export {
   parseAllGamesPgn,
   finalStatus,
   standardUci,
+  sanMoves,
   type ParsedGame,
   type PgnRejection,
   type PgnRejectionCode,
 } from './pgn.js'
+export { normalizeUsername } from './username.js'

@@ -175,3 +175,8 @@ process; it is never linked into this code and never vendored into this
 repository. The worker images download the pinned official release at build
 time and carry attribution. See `docs/NOTICE` and
 https://github.com/official-stockfish/Stockfish.
+
+The board piece set is the cburnett set by Colin M.L. Burnett, tri-licensed
+GPLv2+/BSD/GFDL, vendored (inlined as JSX) from
+`lichess-org/lila`'s `public/piece/cburnett/` at
+`packages/web/src/components/pieces.tsx`.

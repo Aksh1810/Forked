@@ -4,6 +4,7 @@ import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Board } from '../../../../components/Board'
 import { BarChart, LineChart } from '../../../../components/charts'
+import { formatDate } from '../../../../copy'
 import { getJob, type JobView } from '../../../../lib/api'
 
 // The analytics dashboard: 1080px grid, same tokens, d3 charts. Accuracy trend
@@ -98,7 +99,7 @@ export default function Breakdown({ params }: { params: Promise<{ jobId: string 
               <tbody>
                 {w.games.map((g) => (
                   <tr key={g.gameId}>
-                    <td className="quiet">{g.date ?? '--'}</td>
+                    <td className="quiet">{formatDate(g.date)}</td>
                     <td>{g.opponent}</td>
                     <td className={`res-${g.result === '?' ? 'q' : g.result}`}>{g.result.toUpperCase()}</td>
                     <td>{g.accuracy !== null ? g.accuracy.toFixed(1) : '--'}</td>

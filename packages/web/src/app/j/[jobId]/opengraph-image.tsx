@@ -37,5 +37,5 @@ export default async function Image({ params }: { params: Promise<{ jobId: strin
       size,
     )
   }
-  return renderCard(job.wrapped, '4x5', origin)
+  return renderCard(job.wrapped, '4x5', origin, jobId)
 }

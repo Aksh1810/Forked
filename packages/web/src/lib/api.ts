@@ -33,6 +33,9 @@ export interface JobView {
   ring: RingEntryView[]
   agg: PartialAgg
   createdAt: string
+  // Cheap observed-throughput projection (control/status.ts); null when the
+  // job isn't analyzing yet or there's no rate to project from.
+  etaSeconds: number | null
   wrapped: WrappedSummary | null
   failures?: { gameId: string; error: string | null }[]
 }
@@ -45,10 +48,19 @@ export interface GameReport {
   record: EngineRecord | null
 }
 
-export async function getGameReport(jobId: string, gameId: string): Promise<GameReport | null> {
-  const res = await fetch(`${API_BASE}/job/${jobId}/game/${gameId}`)
-  if (!res.ok) return null
-  return (await res.json()) as GameReport
+// 'notFound' is a distinct sentinel from null: null is "couldn't ask" (network
+// error), 'notFound' is "asked, and there is definitely no such game" — the
+// /j/<jobId>/g/<gameId> report page uses that distinction to give up instead
+// of polling a bad id pair forever (see QA2).
+export async function getGameReport(jobId: string, gameId: string): Promise<GameReport | 'notFound' | null> {
+  try {
+    const res = await fetch(`${API_BASE}/job/${jobId}/game/${gameId}`)
+    if (res.status === 404) return 'notFound'
+    if (!res.ok) return null
+    return (await res.json()) as GameReport
+  } catch {
+    return null
+  }
 }
 
 export interface IngestOk {
@@ -122,9 +134,13 @@ export async function postIngest(body: {
 }
 
 export async function getJob(jobId: string, failures = false): Promise<JobView | null> {
-  const res = await fetch(`${API_BASE}/job/${jobId}${failures ? '?failures=1' : ''}`)
-  if (!res.ok) return null
-  return (await res.json()) as JobView
+  try {
+    const res = await fetch(`${API_BASE}/job/${jobId}${failures ? '?failures=1' : ''}`)
+    if (!res.ok) return null
+    return (await res.json()) as JobView
+  } catch {
+    return null
+  }
 }
 
 export interface LeaderUser {
