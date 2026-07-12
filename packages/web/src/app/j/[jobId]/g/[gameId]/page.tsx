@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   BRAND_NAME,
   GAME_PHASES,
+  classifyLive,
   enrichClassifications,
   fenBeforePly,
   finalStatus,
@@ -270,6 +271,13 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // own `from` so the two modes never fight over one field.
   const [branch, setBranch] = useState<{ base: number; moves: string[] } | null>(null)
   const [boardSel, setBoardSel] = useState<string | null>(null)
+  // Live badge for the last branch move (Task 6), judged once the live
+  // engine reaches depth >= 12 on the resulting position.
+  const [branchBadge, setBranchBadge] = useState<{ square: string; kind: Enriched } | null>(null)
+  // The pending live judgment for the LAST user move: eval + best move of the
+  // parent position, captured at play time. Judged once the child position's
+  // live eval reaches depth >= 12.
+  const pendingJudgeRef = useRef<{ before: Eval; bestUci: string | null; uci: string } | null>(null)
   const [engineStatus, setEngineStatus] = useState<'off' | 'loading' | 'ready' | 'failed'>('off')
   const [liveUpdate, setLiveUpdate] = useState<EngineUpdate | null>(null)
   const engineRef = useRef<LiveEngine | null>(null)
@@ -379,8 +387,13 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   useEffect(() => setPreview(false), [selected])
   // Retry mode is the same: stepping or picking another ply exits it.
   useEffect(() => setRetry(null), [selected])
-  // Branch mode: stepping or picking another ply exits it too (same pattern).
-  useEffect(() => setBranch(null), [selected])
+  // Branch mode: stepping or picking another ply exits it too (same pattern),
+  // taking any pending/resolved live judgment on that branch with it.
+  useEffect(() => {
+    setBranch(null)
+    pendingJudgeRef.current = null
+    setBranchBadge(null)
+  }, [selected])
   // Any branch move (or exit) clears the in-progress click selection.
   useEffect(() => setBoardSel(null), [branch])
 
@@ -455,6 +468,19 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   useEffect(() => {
     return () => engineRef.current?.dispose()
   }, [])
+
+  // ponytail: judges only the latest move (no per-move history), depth 12
+  // threshold hardcoded — chess.com-style refine delay, tune if it feels slow.
+  useEffect(() => {
+    const pending = pendingJudgeRef.current
+    if (!pending || !branch || !liveUpdate || liveUpdate.depth < 12) return
+    const last = branch.moves[branch.moves.length - 1]
+    if (last !== pending.uci) return // stale pending from a move that's since been undone/replaced
+    const mover = (branch.base + branch.moves.length) % 2 === 1 ? 'white' : 'black'
+    const kind = classifyLive(pending.before, liveUpdate.lines[0].eval, mover, pending.uci === pending.bestUci)
+    pendingJudgeRef.current = null
+    if (kind !== 'none') setBranchBadge({ square: pending.uci.slice(2, 4), kind })
+  }, [liveUpdate, branch])
 
   const terminal = useMemo(() => (record ? finalStatus(record.uciMoves) : null), [record])
   const accuracies = useMemo(
@@ -566,12 +592,14 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   let arrows: { from: string; to: string; color: string }[] | undefined
 
   if (branch) {
-    // No badge (branched moves have no stored classification — ponytail:
-    // live classification deferred) and no stored tint override: leaving
-    // `tint` undefined falls back to Board's default yellow last-move glow,
-    // a deliberately neutral hint distinct from every tier color.
+    // Badge is the live judgment of the last branch move (see the judging
+    // effect above), resolved once depth >= 12 lands — undefined (no badge,
+    // no tint override) until then, which falls back to Board's default
+    // neutral yellow last-move glow.
     const last = branch.moves[branch.moves.length - 1]
     if (last) lastMove = { from: last.slice(0, 2), to: last.slice(2, 4) }
+    badge = branchBadge ?? undefined
+    tint = branchBadge ? `${TIER[branchBadge.kind].color}66` : undefined
     if (liveUpdate?.lines[0]?.pvUci[0]) {
       const pv0 = liveUpdate.lines[0].pvUci[0]
       arrows = [{ from: pv0.slice(0, 2), to: pv0.slice(2, 4), color: 'var(--best)' }]
@@ -609,6 +637,8 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     setPreview(false)
     setRetry(null)
     setBranch(null)
+    pendingJudgeRef.current = null
+    setBranchBadge(null)
     setSelected(p)
   }
 
@@ -638,15 +668,32 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
       // The shown position has ply.best in place of the played move, so `uci`
       // is only legal AFTER the best move — exit preview/retry and seed the
       // branch with both moves, replaying the position actually on screen.
+      pendingJudgeRef.current = {
+        before: liveUpdate?.lines[0]?.eval ?? shownEval,
+        bestUci: liveUpdate?.lines[0]?.pvUci[0] ?? null,
+        uci,
+      }
+      setBranchBadge(null)
       setPreview(false)
       setRetry(null)
       setBranch({ base: selected - 1, moves: [ply.best, uci] })
       return
     }
     if (!branch && uci === record.uciMoves[selected ?? 0]) {
+      // Stepping the mainline forward — that ply already has a stored
+      // classification (rendered outside branch mode), so any live judgment
+      // in flight belongs to a branch move that no longer exists.
+      pendingJudgeRef.current = null
+      setBranchBadge(null)
       setSelected((selected ?? 0) + 1)
       return
     }
+    pendingJudgeRef.current = {
+      before: liveUpdate?.lines[0]?.eval ?? shownEval,
+      bestUci: liveUpdate?.lines[0]?.pvUci[0] ?? null,
+      uci,
+    }
+    setBranchBadge(null)
     setBranch((b) => (b ? { base: b.base, moves: [...b.moves, uci] } : { base: selected ?? 0, moves: [uci] }))
   }
 
@@ -664,6 +711,8 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // (shared by the ArrowLeft handler above and the Undo chip below).
   function undoBranch() {
     setLiveUpdate(null)
+    pendingJudgeRef.current = null
+    setBranchBadge(null)
     setBranch((b) => (b && b.moves.length > 1 ? { base: b.base, moves: b.moves.slice(0, -1) } : null))
   }
 
