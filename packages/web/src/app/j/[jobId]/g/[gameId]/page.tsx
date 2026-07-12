@@ -901,7 +901,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
           />
 
           <div className="nav-toolbar">
-            <button className="chip-button" onClick={() => setSelected(null)} disabled={selected === null} aria-label={copy.coach.firstLabel}>
+            <button className="chip-button" onClick={() => select(null)} disabled={!branch && selected === null} aria-label={copy.coach.firstLabel}>
               {copy.coach.navFirst}
             </button>
             <button className="chip-button" onClick={() => step(-1)} disabled={selected === null} aria-label={copy.coach.prevLabel}>
@@ -910,7 +910,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
             <button className="chip-button" onClick={() => step(1)} disabled={total === 0 || selected === total} aria-label={copy.coach.nextLabel}>
               {copy.coach.navNext}
             </button>
-            <button className="chip-button" onClick={() => setSelected(total)} disabled={total === 0 || selected === total} aria-label={copy.coach.lastLabel}>
+            <button className="chip-button" onClick={() => select(total)} disabled={total === 0 || (!branch && selected === total)} aria-label={copy.coach.lastLabel}>
               {copy.coach.navLast}
             </button>
           </div>
