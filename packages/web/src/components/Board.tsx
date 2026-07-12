@@ -52,6 +52,28 @@ export function squareFromPoint(
   return squareAt(r, c, flip)
 }
 
+// Pure decision for one pointerdown->pointerup gesture on the board.
+// `downSelected` is whether the square the pointer went down on was ALREADY
+// selectedSq at that moment (i.e. pointerdown was a no-op — it did not fire
+// onSquareClick — so a plain click there must deselect on pointerup, and a
+// drag from there must complete as a move). When pointerdown was NOT already
+// selected, pointerdown fires onSquareClick itself (select or immediate
+// move), so a same-square pointerup must fire nothing or it would double the
+// gesture. Exported for tests (board.test.ts).
+export function dropAction({
+  downSquare,
+  downSelected,
+  upSquare,
+}: {
+  downSquare: string
+  downSelected: boolean
+  upSquare: string | null
+}): 'none' | 'move' | 'deselect' {
+  if (upSquare === null) return 'none'
+  if (upSquare !== downSquare) return 'move'
+  return downSelected ? 'deselect' : 'none'
+}
+
 // Thick, translucent, rounded suggestion arrow (chess.com style): a wide
 // stroke and a proportionally bigger head read clearly at any board size.
 function Arrow({ from, to, color, flip }: { from: string; to: string; color: string; flip: boolean }) {
@@ -107,12 +129,15 @@ export function Board({
   // Callers compute this via chessops `pos.dests(fromIdx)`.
   dests?: string[]
 }) {
-  // Drag state: the square where the pointer went down (and its piece, for the
-  // ghost), plus the live pointer position. Click-to-move is unchanged — a
-  // pointerdown IS the click (select/deselect via the page's clickMove machine),
-  // and a pointerup over a different square completes the move.
+  // Drag state: the square where the pointer went down (and its piece, for
+  // the ghost), the live pointer position, and whether that square was
+  // already selected at pointerdown (see dropAction above — this is what
+  // lets click-to-select-then-drag-the-same-piece work instead of silently
+  // deselecting before the drag starts).
   const gridRef = useRef<HTMLDivElement>(null)
-  const [drag, setDrag] = useState<{ from: string; piece: string; x: number; y: number } | null>(null)
+  const [drag, setDrag] = useState<{ from: string; piece: string; x: number; y: number; downSelected: boolean } | null>(
+    null,
+  )
 
   let grid = ranks(fen)
   if (flip) grid = grid.slice().reverse().map((row) => row.slice().reverse())
@@ -122,16 +147,24 @@ export function Board({
       role="img"
       aria-label={alt ?? 'chess position'}
       ref={gridRef}
-      onPointerDown={onSquareClick ? (e) => e.currentTarget.setPointerCapture(e.pointerId) : undefined}
+      onPointerDown={
+        onSquareClick
+          ? (e) => {
+              if (e.button !== 0) return // FIX 6: ignore right/middle-click
+              e.currentTarget.setPointerCapture(e.pointerId)
+            }
+          : undefined
+      }
       onPointerMove={drag ? (e) => setDrag({ ...drag, x: e.clientX, y: e.clientY }) : undefined}
       onPointerUp={
         onSquareClick && drag
           ? (e) => {
               const rect = gridRef.current?.getBoundingClientRect()
+              const target = rect ? squareFromPoint(rect, e.clientX, e.clientY, flip) : null
+              const action = dropAction({ downSquare: drag.from, downSelected: drag.downSelected, upSquare: target })
               setDrag(null)
-              if (!rect) return
-              const target = squareFromPoint(rect, e.clientX, e.clientY, flip)
-              if (target && target !== drag.from) onSquareClick(target)
+              if (action === 'move' && target) onSquareClick(target)
+              else if (action === 'deselect') onSquareClick(drag.from)
             }
           : undefined
       }
@@ -163,9 +196,15 @@ export function Board({
               onPointerDown={
                 onSquareClick
                   ? (e) => {
+                      if (e.button !== 0) return // FIX 6: ignore right/middle-click
                       e.preventDefault()
-                      onSquareClick(square)
-                      if (piece) setDrag({ from: square, piece, x: e.clientX, y: e.clientY })
+                      // FIX 1: a square that's already selected does NOT fire a
+                      // second click on pointerdown — that would deselect it
+                      // before the drag even starts. It only fires (deselect
+                      // or move) on pointerup, via dropAction below.
+                      const downSelected = selectedSq === square
+                      if (!downSelected) onSquareClick(square)
+                      if (piece) setDrag({ from: square, piece, x: e.clientX, y: e.clientY, downSelected })
                     }
                   : undefined
               }
@@ -272,6 +311,10 @@ export function Board({
     </div>
   )
 
+  // FIX 5: the board is rendered at maxWidth: 100%, so `size` can be larger
+  // than the actual on-screen square — read the real rect once a drag exists.
+  const ghostSize = drag ? (gridRef.current?.getBoundingClientRect().width ?? size) / 8 : 0
+
   return (
     <div style={{ position: 'relative', width: size, maxWidth: '100%' }}>
       {gridEl}
@@ -290,8 +333,10 @@ export function Board({
             left: drag.x,
             top: drag.y,
             transform: 'translate(-50%, -50%)',
-            width: size / 8,
-            height: size / 8,
+            // FIX 5: size from the board's ACTUAL rendered square (it's
+            // maxWidth: 100%, so `size` overstates it on narrow viewports).
+            width: ghostSize,
+            height: ghostSize,
             pointerEvents: 'none',
             opacity: 0.85,
             zIndex: 10,

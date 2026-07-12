@@ -162,12 +162,14 @@ export const copy = {
     // lines and the Undo chip. Resume reuses copy.coach.resume above.
     exploreYourMove: 'Exploring — your move',
     exploreMoves: (sans: string) => `Exploring — ${sans}`,
-    exploreLoadingEngine: 'Loading engine…',
-    exploreUnavailable: 'Engine unavailable — explore continues without evals.',
     exploreUndo: 'Undo',
-    // Live engine lines panel (chess.com-style MultiPV list).
+    // Live engine lines panel (chess.com-style MultiPV list) — the sole owner
+    // of engine-status copy; BranchCard no longer duplicates it.
     engineLinesLoading: 'Loading engine…',
     engineLinesUnavailable: 'Engine unavailable — stored analysis still shown.',
+    // FIX 3: shown instead of the (would-be endless) loading line once the
+    // shown position is checkmate/stalemate.
+    engineLinesTerminal: 'No moves — the game is over.',
     engineDepth: (d: number) => `depth ${d}`,
     // Key-moves filter toggle above the move list.
     filterAll: 'All moves',

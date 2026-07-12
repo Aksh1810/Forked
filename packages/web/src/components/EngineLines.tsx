@@ -26,7 +26,12 @@ export function EngineLines({
       {(status === 'loading' || (status === 'ready' && !update)) && (
         <p className="quiet">{copy.coach.engineLinesLoading}</p>
       )}
-      {status === 'ready' && update && (
+      {/* FIX 3: a checkmated/stalemated position never produces a `pv` line,
+          so `update` can land as a terminal (empty-lines) update instead of
+          just never arriving — show a quiet terminal line, not the loading
+          text forever. */}
+      {status === 'ready' && update?.terminal && <p className="quiet">{copy.coach.engineLinesTerminal}</p>}
+      {status === 'ready' && update && !update.terminal && (
         <>
           <p className="quiet mono engine-lines-depth">{copy.coach.engineDepth(update.depth)}</p>
           {update.lines.map((l, i) => (

@@ -223,24 +223,16 @@ function RetryCard({ outcome, onShowBest }: { outcome: 'wrong' | 'success' | nul
 
 // Live branch mode's coach-card slot (Wave 2): swaps in while a branch is
 // active. Same fixed-height .coach-card slot as CoachCard/RetryCard (the
-// class, not a variant), so the toolbar below never shifts on entry. The
-// eval/depth/PV line moved into the EngineLines panel below, so this card is
-// just the headline plus loading/failed states.
-function BranchCard({
-  sans,
-  engineStatus,
-}: {
-  sans: string[]
-  engineStatus: 'off' | 'loading' | 'ready' | 'failed'
-}) {
+// class, not a variant), so the toolbar below never shifts on entry. Just the
+// headline — engine status (loading/failed) is EngineLines' job alone now
+// (FIX 7: this card used to duplicate that copy verbatim).
+function BranchCard({ sans }: { sans: string[] }) {
   return (
     <div className="coach-card">
       <div className="coach-head">
         <TierIcon kind="best" size={22} />
         <strong>{sans.length ? copy.coach.exploreMoves(sans.join(' ')) : copy.coach.exploreYourMove}</strong>
       </div>
-      {engineStatus === 'loading' && <div className="quiet coach-pv">{copy.coach.exploreLoadingEngine}</div>}
-      {engineStatus === 'failed' && <div className="quiet coach-pv">{copy.coach.exploreUnavailable}</div>}
     </div>
   )
 }
@@ -278,6 +270,13 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // parent position, captured at play time. Judged once the child position's
   // live eval reaches depth >= 12.
   const pendingJudgeRef = useRef<{ before: Eval; bestUci: string | null; uci: string } | null>(null)
+  // FIX 2: the last live eval the engine actually produced, keyed by the
+  // exact fen it was produced for — NOT liveUpdate, which playUserMove
+  // clears on every move. Used as the "before" baseline when a new branch
+  // move is played; if it doesn't match the position being moved from (the
+  // engine hasn't reached MIN_DEPTH there yet), that means there's no known
+  // eval for that position and playUserMove must not guess one.
+  const lastLiveRef = useRef<{ fen: string; eval: Eval; bestUci: string | null } | null>(null)
   const [engineStatus, setEngineStatus] = useState<'off' | 'loading' | 'ready' | 'failed'>('off')
   const [liveUpdate, setLiveUpdate] = useState<EngineUpdate | null>(null)
   const engineRef = useRef<LiveEngine | null>(null)
@@ -365,23 +364,22 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // position (selected null), ArrowRight from the start goes to move 1. In
   // the Key filter this jumps to the nearest key ply instead (see stepTo).
   // A 0-ply record (no analyzed moves) is a no-op.
+  // FIX 4 (spec §2): stepping always DISCARDS an active branch and steps the
+  // mainline — it does not repurpose the arrow keys as branch-undo. Undo
+  // stays available only via its own chip button (undoBranch below).
   useEffect(() => {
     if (total === 0) return
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
       e.preventDefault()
-      // Branch mode repurposes the arrow keys: Left undoes a branch move,
-      // Right is a no-op (there is no "redo" — chess.com's model is a single
-      // line, not a tree).
-      if (branch) {
-        if (e.key === 'ArrowLeft') undoBranch()
-        return
-      }
+      setBranch(null)
+      pendingJudgeRef.current = null
+      setBranchBadge(null)
       setSelected((s) => stepTo(s, e.key === 'ArrowRight' ? 1 : -1, total, filter, keyPlies))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [total, filter, keyPlies, branch])
+  }, [total, filter, keyPlies])
 
   // Best-move preview is a one-off look; any new selection cancels it.
   useEffect(() => setPreview(false), [selected])
@@ -459,7 +457,11 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
       }
       if (cancelled) return
       engineRef.current?.analyze(fen, (u) => {
-        if (!cancelled) setLiveUpdate(u)
+        if (cancelled) return
+        setLiveUpdate(u)
+        // FIX 2: record the last-known-good eval for THIS exact position,
+        // independent of liveUpdate (which gets cleared on every move).
+        if (u.lines[0]) lastLiveRef.current = { fen, eval: u.lines[0].eval, bestUci: u.lines[0].pvUci[0] ?? null }
       })
     }
     void run()
@@ -480,7 +482,9 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // read compared against the parent's deeper-settled "before" eval.
   useEffect(() => {
     const pending = pendingJudgeRef.current
-    if (!pending || !branch || !liveUpdate || liveUpdate.depth < 12) return
+    // FIX 3: a terminal (mate/stalemate) update has no lines[0] — nothing to
+    // judge against, and liveUpdate.lines[0].eval below would throw.
+    if (!pending || !branch || !liveUpdate || !liveUpdate.lines[0] || liveUpdate.depth < 12) return
     const last = branch.moves[branch.moves.length - 1]
     if (last !== pending.uci) return // stale pending from a move that's since been undone/replaced
     const mover = (branch.base + branch.moves.length) % 2 === 1 ? 'white' : 'black'
@@ -577,7 +581,9 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // shows the eval BEFORE the selected ply — the board isn't showing the
   // played move's damage.
   let shownEval: Eval
-  if (!retryGuessing && liveUpdate) {
+  // FIX 3: a terminal update has no lines[0] — fall through to the stored
+  // eval instead of crashing on liveUpdate.lines[0].eval.
+  if (!retryGuessing && liveUpdate?.lines[0]) {
     shownEval = liveUpdate.lines[0].eval
   } else {
     shownEval = record.startEval
@@ -633,7 +639,16 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   const top = flip ? game.white : game.black
   const bottom = flip ? game.black : game.white
 
-  const step = (dir: 1 | -1) => setSelected((s) => stepTo(s, dir, total, filter, keyPlies))
+  // FIX 4: stepping discards an active branch (spec §2) rather than being
+  // disabled while one is active — shared by the nav-toolbar Prev/Next
+  // buttons; the bottom-row Next/Resume button only reaches this when
+  // !branch already, so the clearing here is a no-op for that caller.
+  const step = (dir: 1 | -1) => {
+    setBranch(null)
+    pendingJudgeRef.current = null
+    setBranchBadge(null)
+    setSelected((s) => stepTo(s, dir, total, filter, keyPlies))
+  }
 
   // Click-driven selection (move list, eval graph, summary chip): exits any
   // active mode explicitly. Re-clicking the already-selected ply is a
@@ -670,15 +685,18 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   function playUserMove(uci: string) {
     setBoardSel(null)
     setLiveUpdate(null)
+    // FIX 2: the only trustworthy "before" eval is one the engine actually
+    // produced FOR the position being moved from (`fen`) — liveUpdate gets
+    // cleared on every move, so a fast second branch move would otherwise
+    // fall back to shownEval, which can belong to the mainline ply instead of
+    // the branch. ponytail: fast successive moves go unbadged rather than
+    // mis-badged — no guessing when the engine hasn't caught up to `fen` yet.
+    const live = lastLiveRef.current?.fen === fen ? lastLiveRef.current : null
     if (!branch && showBestLine && ply && selected !== null) {
       // The shown position has ply.best in place of the played move, so `uci`
       // is only legal AFTER the best move — exit preview/retry and seed the
       // branch with both moves, replaying the position actually on screen.
-      pendingJudgeRef.current = {
-        before: liveUpdate?.lines[0]?.eval ?? shownEval,
-        bestUci: liveUpdate?.lines[0]?.pvUci[0] ?? null,
-        uci,
-      }
+      pendingJudgeRef.current = live ? { before: live.eval, bestUci: live.bestUci, uci } : null
       setBranchBadge(null)
       setPreview(false)
       setRetry(null)
@@ -694,11 +712,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
       setSelected((selected ?? 0) + 1)
       return
     }
-    pendingJudgeRef.current = {
-      before: liveUpdate?.lines[0]?.eval ?? shownEval,
-      bestUci: liveUpdate?.lines[0]?.pvUci[0] ?? null,
-      uci,
-    }
+    pendingJudgeRef.current = live ? { before: live.eval, bestUci: live.bestUci, uci } : null
     setBranchBadge(null)
     setBranch((b) => (b ? { base: b.base, moves: [...b.moves, uci] } : { base: selected ?? 0, moves: [uci] }))
   }
@@ -779,7 +793,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
 
         <div className="review-panel">
           {branch ? (
-            <BranchCard sans={branchSans} engineStatus={engineStatus} />
+            <BranchCard sans={branchSans} />
           ) : selected === null ? (
             <SummaryCard
               white={game.white.name}
@@ -890,10 +904,10 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
             <button className="chip-button" onClick={() => setSelected(null)} disabled={selected === null} aria-label={copy.coach.firstLabel}>
               {copy.coach.navFirst}
             </button>
-            <button className="chip-button" onClick={() => step(-1)} disabled={!!branch || selected === null} aria-label={copy.coach.prevLabel}>
+            <button className="chip-button" onClick={() => step(-1)} disabled={selected === null} aria-label={copy.coach.prevLabel}>
               {copy.coach.navPrev}
             </button>
-            <button className="chip-button" onClick={() => step(1)} disabled={!!branch || total === 0 || selected === total} aria-label={copy.coach.nextLabel}>
+            <button className="chip-button" onClick={() => step(1)} disabled={total === 0 || selected === total} aria-label={copy.coach.nextLabel}>
               {copy.coach.navNext}
             </button>
             <button className="chip-button" onClick={() => setSelected(total)} disabled={total === 0 || selected === total} aria-label={copy.coach.lastLabel}>

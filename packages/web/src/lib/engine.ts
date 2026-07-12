@@ -12,6 +12,11 @@ export interface EngineLine {
 export interface EngineUpdate {
   depth: number
   lines: EngineLine[] // lines[0] is the best line; up to 3 (MultiPV)
+  // FIX 3: set when Stockfish reports `bestmove (none)` for the CURRENT
+  // search — a checkmated/stalemated position, which never has a `pv` line
+  // for parseInfoLine to pick up, so this is the only terminal signal there
+  // is. `lines` is always empty on a terminal update.
+  terminal?: boolean
 }
 
 const THROTTLE_MS = 125
@@ -102,8 +107,15 @@ export class LiveEngine {
 
   private handleLine(line: string) {
     if (line.startsWith('bestmove')) {
-      if (this.staleBestmoves > 0) this.staleBestmoves -= 1
-      else this.searching = false
+      if (this.staleBestmoves > 0) {
+        this.staleBestmoves -= 1 // an old search draining out — not this position
+        return
+      }
+      this.searching = false
+      // FIX 3: `bestmove (none)` means no legal moves (checkmate/stalemate).
+      // No `info ... pv ...` line ever arrives for this position, so without
+      // this EngineLines would show "Loading engine…" forever.
+      if (line.startsWith('bestmove (none)')) this.schedule({ depth: 0, lines: [], terminal: true })
       return
     }
     if (this.staleBestmoves > 0) return // old search still draining
