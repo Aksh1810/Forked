@@ -155,8 +155,18 @@ export const copy = {
     outcomeResult: (winner: string, result: string) => `${winner} wins ${result}.`,
     outcomeDraw: 'A draw.',
     analyzeAnother: 'Analyze another game →',
-    // Best-preview / explore-mode headline.
+    // Best-preview headline (the one-off "Best" toggle, distinct from live
+    // explore mode below).
     exploring: 'Exploring the best line',
+    // Live explore mode (playable board + browser Stockfish): ExploreCard
+    // lines and the Undo chip. Resume reuses copy.coach.resume above.
+    exploreYourMove: 'Exploring — your move',
+    exploreMoves: (sans: string) => `Exploring — ${sans}`,
+    exploreLoadingEngine: 'Loading engine…',
+    exploreUnavailable: 'Engine unavailable — explore continues without evals.',
+    exploreEvalLine: (evalStr: string, depth: number, bestSan: string) =>
+      `${evalStr} · depth ${depth}${bestSan ? ` · best: ${bestSan}` : ''}`,
+    exploreUndo: 'Undo',
     // Key-moves filter toggle above the move list.
     filterAll: 'All moves',
     filterKey: 'Key moves',
@@ -216,6 +226,14 @@ export const copy = {
     'Weighing every pawn you called poisoned and ate anyway...',
     'Sorting your wins from your escapes...',
   ],
+
+  // /about page: one quiet GPL-credit line for the live browser Stockfish
+  // engine (item 10, Wave 2).
+  about: {
+    engineCredit: 'Analysis engines: Stockfish (GPLv3) —',
+    engineSource: 'source',
+    engineLicense: 'license',
+  },
 } as const
 
 // Book-tier coach headline, naming the opening: "<san> is a book move · <name>".

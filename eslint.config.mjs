@@ -10,6 +10,7 @@ export default tseslint.config(
       '**/cdk.out/**',
       '**/coverage/**',
       '**/next-env.d.ts',
+      '**/public/engine/**',
       'packages/shared/src/openings.gen.ts',
     ],
   },

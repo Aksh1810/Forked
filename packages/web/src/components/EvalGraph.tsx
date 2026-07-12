@@ -183,6 +183,7 @@ export function MoveList({
   bestSan,
   onSelect,
   filter,
+  exploreLine,
 }: {
   record: EngineRecord
   sans: string[]
@@ -195,6 +196,11 @@ export function MoveList({
   // set the eval graph dots use) — the fastest path to "show me what went
   // wrong". Filters whole pairs, not halves, so numbering stays intact.
   filter: 'all' | 'key'
+  // Live explore mode (Wave 2): the branch line played from `afterPly`
+  // onward, rendered as a .move-variation row right after that ply's pair
+  // (or before move 1 when afterPly is 0, i.e. branching from the start
+  // position). The current (last) SAN is emphasized.
+  exploreLine?: { afterPly: number; sans: string[] } | null
 }) {
   useEffect(() => {
     document.querySelector('.move-selected')?.scrollIntoView({ block: 'nearest' })
@@ -206,6 +212,9 @@ export function MoveList({
   }
   if (filter === 'key') {
     rows = rows.filter((row) => {
+      // Always keep the pair an explore branch anchors to — otherwise the
+      // variation row below it has nowhere to render.
+      if (exploreLine && (exploreLine.afterPly === row.white.ply || exploreLine.afterPly === row.black?.ply)) return true
       const wt = enriched[row.white.ply - 1]
       const bt = row.black && enriched[row.black.ply - 1]
       return (wt && KEY_TIERS.has(wt)) || (bt && KEY_TIERS.has(bt))
@@ -214,9 +223,18 @@ export function MoveList({
 
   return (
     <ol className="mono move-pairs" aria-label="move list">
+      {exploreLine && exploreLine.afterPly === 0 && (
+        <li className="move-variation quiet mono">
+          <ExploreVariation afterPly={0} sans={exploreLine.sans} />
+        </li>
+      )}
       {rows.map((row) => {
         const previewInRow =
           previewPly === row.white.ply ? row.white.ply : previewPly === row.black?.ply ? row.black.ply : null
+        const exploreInRow =
+          exploreLine && exploreLine.afterPly !== 0
+            ? exploreLine.afterPly === row.white.ply || exploreLine.afterPly === row.black?.ply
+            : false
         return (
           <Fragment key={row.num}>
             <li className="move-pair">
@@ -248,10 +266,33 @@ export function MoveList({
                 <TierIcon kind="best" size={14} /> {bestSan}
               </li>
             )}
+            {exploreInRow && exploreLine && (
+              <li className="move-variation quiet mono">
+                <ExploreVariation afterPly={exploreLine.afterPly} sans={exploreLine.sans} />
+              </li>
+            )}
           </Fragment>
         )
       })}
     </ol>
+  )
+}
+
+// The explore-line label counts from the first branched ply (afterPly + 1),
+// same numbering convention as the preview row above; the last SAN (current
+// position) is emphasized so the line reads as "you are here".
+function ExploreVariation({ afterPly, sans }: { afterPly: number; sans: string[] }) {
+  const firstPly = afterPly + 1
+  return (
+    <>
+      {`${Math.ceil(firstPly / 2)}${firstPly % 2 ? '.' : '...'} `}
+      {sans.map((s, i) => (
+        <span key={i} style={i === sans.length - 1 ? { fontWeight: 700, color: 'var(--best)' } : undefined}>
+          {s}
+          {i < sans.length - 1 ? ' ' : ''}
+        </span>
+      ))}
+    </>
   )
 }
 

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .next/
+packages/web/public/engine/
 cdk.out/
 *.tsbuildinfo
 coverage/

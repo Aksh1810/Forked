@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { BRAND_NAME } from '@forked/shared'
+import { copy } from '../../copy'
 
 export const metadata = { title: `about | ${BRAND_NAME}` }
 
@@ -22,6 +23,16 @@ export default function About() {
         Analysis by <a href="https://stockfishchess.org">Stockfish</a>, the open-source chess
         engine, running as a separate GPLv3 program. Openings from the lichess
         chess-openings dataset (CC0).
+      </p>
+      <p className="quiet">
+        {copy.about.engineCredit}{' '}
+        <a href="https://github.com/nmrugg/stockfish.js" target="_blank" rel="noopener noreferrer">
+          {copy.about.engineSource}
+        </a>{' '}
+        ·{' '}
+        <a href="/engine/Copying.txt" target="_blank" rel="noopener noreferrer">
+          {copy.about.engineLicense}
+        </a>
       </p>
       <p>
         <Link href="/">Back</Link>

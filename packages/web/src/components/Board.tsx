@@ -69,6 +69,7 @@ export function Board({
   badge,
   onSquareClick,
   selectedSq,
+  dests,
 }: {
   fen: string
   size?: number
@@ -81,12 +82,15 @@ export function Board({
   // tint this by classification (orange for a mistake, green for best, ...).
   tint?: string
   badge?: { square: string; kind: Enriched }
-  // Retry mode (A2): click-only piece-then-destination selection. v1 has no
-  // drag and no keyboard support — a plain onClick per square is enough for
-  // the lite practice loop this powers.
+  // Retry mode (A2) and explore mode (Wave 2): click-only piece-then-destination
+  // selection. v1 has no drag and no keyboard support — a plain onClick per
+  // square is enough for the lite practice loop this powers.
   // ponytail: click-only v1, no drag/keyboard.
   onSquareClick?: (sq: string) => void
   selectedSq?: string
+  // Legal-move dots for the currently selected piece (retry + explore modes).
+  // Callers compute this via chessops `pos.dests(fromIdx)`.
+  dests?: string[]
 }) {
   let grid = ranks(fen)
   if (flip) grid = grid.slice().reverse().map((row) => row.slice().reverse())
@@ -136,6 +140,21 @@ export function Board({
                     position: 'absolute',
                     inset: 0,
                     boxShadow: 'inset 0 0 0 3px rgba(255,255,255,.85)',
+                  }}
+                />
+              )}
+              {dests?.includes(square) && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '28%',
+                    height: '28%',
+                    borderRadius: '50%',
+                    background: dark ? 'rgba(255,255,255,.25)' : 'rgba(0,0,0,.25)',
+                    pointerEvents: 'none',
                   }}
                 />
               )}
