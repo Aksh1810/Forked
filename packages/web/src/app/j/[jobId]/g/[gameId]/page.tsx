@@ -634,6 +634,15 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   function playUserMove(uci: string) {
     setBoardSel(null)
     setLiveUpdate(null)
+    if (!branch && showBestLine && ply && selected !== null) {
+      // The shown position has ply.best in place of the played move, so `uci`
+      // is only legal AFTER the best move — exit preview/retry and seed the
+      // branch with both moves, replaying the position actually on screen.
+      setPreview(false)
+      setRetry(null)
+      setBranch({ base: selected - 1, moves: [ply.best, uci] })
+      return
+    }
     if (!branch && uci === record.uciMoves[selected ?? 0]) {
       setSelected((selected ?? 0) + 1)
       return
@@ -752,7 +761,15 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
             <EngineLines
               status={engineStatus}
               update={liveUpdate}
-              prefixUci={branch ? [...branchPrefix, ...branch.moves] : record.uciMoves.slice(0, selected ?? 0)}
+              prefixUci={
+                branch
+                  ? [...branchPrefix, ...branch.moves]
+                  : showBestLine && ply && selected !== null
+                    ? // Preview/retry-success shows the position after ply.best,
+                      // not the played move — the PV prefix must match it.
+                      [...record.uciMoves.slice(0, selected - 1), ply.best]
+                    : record.uciMoves.slice(0, selected ?? 0)
+              }
               onPlayMove={playUserMove}
             />
           )}
