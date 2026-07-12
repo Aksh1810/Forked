@@ -164,8 +164,6 @@ export const copy = {
     exploreMoves: (sans: string) => `Exploring — ${sans}`,
     exploreLoadingEngine: 'Loading engine…',
     exploreUnavailable: 'Engine unavailable — explore continues without evals.',
-    exploreEvalLine: (evalStr: string, depth: number, bestSan: string) =>
-      `${evalStr} · depth ${depth}${bestSan ? ` · best: ${bestSan}` : ''}`,
     exploreUndo: 'Undo',
     // Live engine lines panel (chess.com-style MultiPV list).
     engineLinesLoading: 'Loading engine…',

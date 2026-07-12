@@ -389,10 +389,14 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   useEffect(() => setRetry(null), [selected])
   // Branch mode: stepping or picking another ply exits it too (same pattern),
   // taking any pending/resolved live judgment on that branch with it.
+  // Also clears liveUpdate here so the previous position's lines/depth don't
+  // stay painted for a frame while the [shownFen] effect's own clear+re-run
+  // catches up (Finding 2).
   useEffect(() => {
     setBranch(null)
     pendingJudgeRef.current = null
     setBranchBadge(null)
+    setLiveUpdate(null)
   }, [selected])
   // Any branch move (or exit) clears the in-progress click selection.
   useEffect(() => setBoardSel(null), [branch])
@@ -471,6 +475,9 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
 
   // ponytail: judges only the latest move (no per-move history), depth 12
   // threshold hardcoded — chess.com-style refine delay, tune if it feels slow.
+  // Keeps judging on every liveUpdate past depth 12 (not just the first) so
+  // the badge refines as the search deepens instead of freezing on a shallow
+  // read compared against the parent's deeper-settled "before" eval.
   useEffect(() => {
     const pending = pendingJudgeRef.current
     if (!pending || !branch || !liveUpdate || liveUpdate.depth < 12) return
@@ -478,8 +485,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     if (last !== pending.uci) return // stale pending from a move that's since been undone/replaced
     const mover = (branch.base + branch.moves.length) % 2 === 1 ? 'white' : 'black'
     const kind = classifyLive(pending.before, liveUpdate.lines[0].eval, mover, pending.uci === pending.bestUci)
-    pendingJudgeRef.current = null
-    if (kind !== 'none') setBranchBadge({ square: pending.uci.slice(2, 4), kind })
+    setBranchBadge(kind !== 'none' ? { square: pending.uci.slice(2, 4), kind } : null)
   }, [liveUpdate, branch])
 
   const terminal = useMemo(() => (record ? finalStatus(record.uciMoves) : null), [record])
