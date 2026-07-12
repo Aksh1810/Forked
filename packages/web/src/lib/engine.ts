@@ -4,10 +4,14 @@
 // server does nothing.
 import type { Eval } from '@forked/shared'
 
-export interface EngineUpdate {
-  depth: number
+export interface EngineLine {
   eval: Eval
   pvUci: string[]
+}
+
+export interface EngineUpdate {
+  depth: number
+  lines: EngineLine[] // lines[0] is the best line; up to 3 (MultiPV)
 }
 
 const THROTTLE_MS = 125
@@ -21,7 +25,7 @@ const MIN_DEPTH = 10
 export function parseInfoLine(
   line: string,
   blackToMove: boolean,
-): { depth: number; eval: Eval; pvUci: string[] } | null {
+): { depth: number; multipv: number; eval: Eval; pvUci: string[] } | null {
   if (!/^info\b/.test(line)) return null
   if (/\b(upperbound|lowerbound)\b/.test(line)) return null
 
@@ -30,19 +34,19 @@ export function parseInfoLine(
   const pvM = /\bpv (.+)$/.exec(line)
   if (!depthM || !scoreM || !pvM) return null
 
+  const multipvM = /\bmultipv (\d+)/.exec(line)
   const rawType = scoreM[1] as 'cp' | 'mate'
   const rawValue = Number(scoreM[2])
   const value = !blackToMove || rawValue === 0 ? rawValue : -rawValue
 
   return {
     depth: Number(depthM[1]),
+    multipv: multipvM ? Number(multipvM[1]) : 1,
     eval: { type: rawType, value } as Eval,
     pvUci: pvM[1].trim().split(/\s+/),
   }
 }
 
-// ponytail: MultiPV 1 only — one line, one arrow. Add MultiPV when a "show
-// alternatives" UI actually asks for it.
 export class LiveEngine {
   private worker: Worker | null = null
   private cache = new Map<string, EngineUpdate>()
@@ -52,6 +56,9 @@ export class LiveEngine {
   private lastEmit = 0
   private pending: EngineUpdate | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
+  // The three MultiPV slots for the current search; rebuilt from scratch on
+  // every analyze() so a new position never shows the old position's lines.
+  private lineSlots: (EngineLine & { depth: number })[] = []
   // Stale-line guard: after `analyze` interrupts a running search, the old
   // search still flushes info lines until its `bestmove` lands — without this
   // they'd be parsed with the NEW position's side-to-move and cached under
@@ -74,8 +81,10 @@ export class LiveEngine {
     this.worker = worker
     await new Promise<void>((resolve, reject) => {
       function onLine(e: MessageEvent<string>) {
-        if (e.data === 'uciok') worker.postMessage('isready')
-        else if (e.data === 'readyok') {
+        if (e.data === 'uciok') {
+          worker.postMessage('setoption name MultiPV value 3')
+          worker.postMessage('isready')
+        } else if (e.data === 'readyok') {
           worker.removeEventListener('message', onLine)
           resolve()
         }
@@ -101,7 +110,13 @@ export class LiveEngine {
     if (!this.onUpdate) return
     const parsed = parseInfoLine(line, this.blackToMove)
     if (!parsed || parsed.depth < MIN_DEPTH) return
-    this.schedule(parsed)
+    this.lineSlots[parsed.multipv - 1] = { eval: parsed.eval, pvUci: parsed.pvUci, depth: parsed.depth }
+    const first = this.lineSlots[0]
+    if (!first) return // never emit an update without the best line
+    this.schedule({
+      depth: first.depth,
+      lines: this.lineSlots.filter(Boolean).map((l) => ({ eval: l.eval, pvUci: l.pvUci })),
+    })
   }
 
   // Trailing-edge throttle: at most one emit per THROTTLE_MS, but the last
@@ -141,6 +156,7 @@ export class LiveEngine {
     this.pending = null
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
+    this.lineSlots = []
 
     const cached = this.cache.get(fen)
     if (cached) onUpdate(cached)

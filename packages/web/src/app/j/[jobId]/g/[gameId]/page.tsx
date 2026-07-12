@@ -288,9 +288,9 @@ function ExploreCard({
       </div>
       {engineStatus === 'loading' && <div className="quiet coach-pv">{copy.coach.exploreLoadingEngine}</div>}
       {engineStatus === 'failed' && <div className="quiet coach-pv">{copy.coach.exploreUnavailable}</div>}
-      {engineStatus === 'ready' && liveUpdate && (
+      {engineStatus === 'ready' && liveUpdate && liveUpdate.lines[0] && (
         <div className="quiet coach-pv mono">
-          {copy.coach.exploreEvalLine(formatEval(liveUpdate.eval), liveUpdate.depth, bestSans.join(' '))}
+          {copy.coach.exploreEvalLine(formatEval(liveUpdate.lines[0].eval), liveUpdate.depth, bestSans.join(' '))}
         </div>
       )}
     </div>
@@ -598,7 +598,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // showing the played move's damage.
   let shownEval: Eval
   if (explore) {
-    shownEval = liveUpdate?.eval ?? evalAfterPly(explore.base)
+    shownEval = liveUpdate?.lines[0]?.eval ?? evalAfterPly(explore.base)
   } else {
     shownEval = record.startEval
     if (selected !== null) {
@@ -624,8 +624,8 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     // a deliberately neutral hint distinct from every tier color.
     const last = explore.moves[explore.moves.length - 1]
     if (last) lastMove = { from: last.slice(0, 2), to: last.slice(2, 4) }
-    if (liveUpdate?.pvUci[0]) {
-      const pv0 = liveUpdate.pvUci[0]
+    if (liveUpdate?.lines[0]?.pvUci[0]) {
+      const pv0 = liveUpdate.lines[0].pvUci[0]
       arrows = [{ from: pv0.slice(0, 2), to: pv0.slice(2, 4), color: 'var(--best)' }]
     }
   } else if (retryGuessing) {
@@ -716,7 +716,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // (pv sliced to 4 plies — enough to read, not a whole line).
   const explorePrefix = explore ? record.uciMoves.slice(0, explore.base) : []
   const exploreSans = explore ? sanMoves(explore.moves, explorePrefix) : []
-  const exploreBestSans = explore && liveUpdate ? sanMoves(liveUpdate.pvUci.slice(0, 4), [...explorePrefix, ...explore.moves]) : []
+  const exploreBestSans = explore && liveUpdate ? sanMoves(liveUpdate.lines[0]?.pvUci.slice(0, 4) ?? [], [...explorePrefix, ...explore.moves]) : []
 
   return (
     <main className="dash report">
