@@ -68,6 +68,7 @@ export {
 export { winPctFromCp, whiteWinPct, moverWinPct } from './win.js'
 export {
   classifyWinPctSwing,
+  classifyLive,
   enrichClassifications,
   turningPoint,
   moveMotif,
