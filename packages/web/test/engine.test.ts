@@ -61,7 +61,7 @@ test('negates each multipv line independently when black to move', () => {
   expect(r?.eval).toEqual({ type: 'cp', value: -40 })
 })
 
-// --- LiveEngine fence tests -------------------------------------------------
+// --- LiveEngine serialize-on-bestmove tests ---------------------------------
 //
 // A minimal fake UCI worker: records what LiveEngine posts to it and lets a
 // test push lines back in as if the wasm engine emitted them.
@@ -116,15 +116,13 @@ async function setup(): Promise<{ engine: LiveEngine; worker: FakeWorker }> {
   return { engine, worker }
 }
 
-test('terminal position: readyok then mate-0 info + bestmove (none) fires exactly one terminal update', async () => {
+test('terminal position: mate-0 info + bestmove (none) fires exactly one terminal update', async () => {
   const { engine, worker } = await setup()
   const updates: EngineUpdate[] = []
   engine.analyze('8/8/8/8/8/6k1/6q1/6K1 w - - 0 1', (u) => updates.push(u))
 
-  expect(worker.posted.at(-2)).toBe('stop')
-  expect(worker.posted.at(-1)).toBe('isready')
-
-  worker.emit('readyok') // fence lifts, real search starts
+  // No interrupt in flight, so the search starts immediately — no stop, no
+  // isready, just position+go.
   expect(worker.posted.at(-2)).toBe('position fen 8/8/8/8/8/6k1/6q1/6K1 w - - 0 1')
   expect(worker.posted.at(-1)).toBe('go movetime 8000')
 
@@ -135,53 +133,101 @@ test('terminal position: readyok then mate-0 info + bestmove (none) fires exactl
   expect(updates[0]).toEqual({ depth: 0, lines: [], terminal: true })
 })
 
-test('rapid double interrupt: only the newest fen is searched, nothing swallowed after', async () => {
+test('rapid triple interrupt: only one stop is posted, and only the newest fen is searched', async () => {
   const { engine, worker } = await setup()
-  const updates: EngineUpdate[] = []
+  const updatesA: EngineUpdate[] = []
+  const updatesB: EngineUpdate[] = []
+  const updatesC: EngineUpdate[] = []
 
   // Three analyze() calls in a row, none of A's or B's bestmove ever arrives
-  // — the old bug: staleBestmoves would climb to 2 and never drain.
-  engine.analyze('fenA w - - 0 1', () => {
-    throw new Error('A must never receive an update')
-  })
-  engine.analyze('fenB w - - 0 1', () => {
-    throw new Error('B must never receive an update')
-  })
-  engine.analyze('fenC w - - 0 1', (u) => updates.push(u))
+  // — the old counter-based design would climb to 2 and never drain,
+  // permanently swallowing every subsequent line.
+  engine.analyze('fenA w - - 0 1', (u) => updatesA.push(u))
+  engine.analyze('fenB w - - 0 1', (u) => updatesB.push(u))
+  engine.analyze('fenC w - - 0 1', (u) => updatesC.push(u))
 
-  worker.emit('readyok') // the fence's readyok
+  // B's analyze() is the transition into "interrupt pending" (posts stop);
+  // C just overwrites the queued target without piling on another stop.
+  expect(worker.posted.filter((m) => m === 'stop')).toHaveLength(1)
+  expect(worker.posted.filter((m) => m.startsWith('position fen'))).toEqual(['position fen fenA w - - 0 1'])
 
-  const positionPosts = worker.posted.filter((m) => m.startsWith('position fen'))
-  expect(positionPosts).toEqual(['position fen fenC w - - 0 1'])
+  // A's bestmove finally arrives — it belongs to an abandoned search, so it
+  // launches the queued target directly. B is never searched.
+  worker.emit('bestmove a2a3 ponder a7a6')
+  expect(worker.posted.filter((m) => m.startsWith('position fen'))).toEqual([
+    'position fen fenA w - - 0 1',
+    'position fen fenC w - - 0 1',
+  ])
   expect(worker.posted.at(-1)).toBe('go movetime 8000')
 
   worker.emit('info depth 12 score cp 34 pv e2e4 e7e5')
-  expect(updates).toHaveLength(1)
-  expect(updates[0].lines[0].pvUci).toEqual(['e2e4', 'e7e5'])
+  expect(updatesA).toHaveLength(0)
+  expect(updatesB).toHaveLength(0)
+  expect(updatesC).toHaveLength(1)
+  expect(updatesC[0].lines[0].pvUci).toEqual(['e2e4', 'e7e5'])
 })
 
-test('lines before the fence readyok are ignored: not delivered, not cached under the new fen', async () => {
+test('terminal after an interrupt: abandoned search gives way to a mate search, terminal update fires', async () => {
+  // This is the exact scenario that broke the readyok-fence design: this
+  // wasm build never answers isready mid-search, so the fence never lifted
+  // and the terminal bestmove (none) was dropped — UI stuck on "Loading
+  // engine…" after fool's mate.
+  const { engine, worker } = await setup()
+  const updatesA: EngineUpdate[] = []
+  const updatesMate: EngineUpdate[] = []
+
+  engine.analyze('fenA w - - 0 1', (u) => updatesA.push(u))
+  engine.analyze('8/8/8/8/8/6k1/6q1/6K1 w - - 0 1', (u) => updatesMate.push(u))
+  expect(worker.posted.filter((m) => m === 'stop')).toHaveLength(1)
+
+  worker.emit('bestmove d2d4 ponder d7d5') // A's abandoned search reports in
+  expect(worker.posted.at(-2)).toBe('position fen 8/8/8/8/8/6k1/6q1/6K1 w - - 0 1')
+  expect(worker.posted.at(-1)).toBe('go movetime 8000')
+
+  worker.emit('info depth 0 score mate 0')
+  worker.emit('bestmove (none)')
+
+  expect(updatesA).toHaveLength(0)
+  expect(updatesMate).toHaveLength(1)
+  expect(updatesMate[0]).toEqual({ depth: 0, lines: [], terminal: true })
+})
+
+test('stale info lines after stop but before the old bestmove are dropped, never cached under the new fen', async () => {
   const { engine, worker } = await setup()
   engine.analyze('fenA w - - 0 1', () => {})
-  worker.emit('readyok') // unfence, real search starts on A
 
   const updatesB: EngineUpdate[] = []
   engine.analyze('fenB w - - 0 1', (u) => updatesB.push(u))
 
-  // A's search draining out before B's readyok lands — must be ignored.
+  // A's search draining out before its bestmove — must be ignored, not
+  // delivered to B's callback and not cached under fenB.
   worker.emit('info depth 12 score cp 99 pv a2a3')
-  worker.emit('bestmove a2a3 ponder a7a6')
   expect(updatesB).toHaveLength(0)
 
-  worker.emit('readyok') // B's fence lifts
+  worker.emit('bestmove a2a3 ponder a7a6') // A's bestmove launches B's real search
   worker.emit('info depth 12 score cp 5 pv b2b3')
   expect(updatesB).toHaveLength(1)
   expect(updatesB[0].lines[0].eval).toEqual({ type: 'cp', value: 5 })
 
   // Re-analyzing fenB replays the cache synchronously; if the stale cp 99
-  // line had been cached under fenB, this would replay it instead.
+  // line had leaked into the cache under fenB, this would replay it instead.
   const replay: EngineUpdate[] = []
   engine.analyze('fenB w - - 0 1', (u) => replay.push(u))
   expect(replay).toHaveLength(1)
   expect(replay[0].lines[0].eval).toEqual({ type: 'cp', value: 5 })
+})
+
+test('an interrupted search finishing with bestmove (none) does not emit a terminal update', async () => {
+  const { engine, worker } = await setup()
+  const updatesMate: EngineUpdate[] = []
+  engine.analyze('8/8/8/8/8/6k1/6q1/6K1 w - - 0 1', (u) => updatesMate.push(u))
+
+  const updatesB: EngineUpdate[] = []
+  engine.analyze('fenB w - - 0 1', (u) => updatesB.push(u)) // interrupts before mate's bestmove arrives
+
+  worker.emit('bestmove (none)') // the abandoned mate search's own terminal bestmove
+  expect(updatesMate).toHaveLength(0) // must NOT be treated as a terminal update
+
+  expect(worker.posted.at(-2)).toBe('position fen fenB w - - 0 1')
+  expect(worker.posted.at(-1)).toBe('go movetime 8000')
 })

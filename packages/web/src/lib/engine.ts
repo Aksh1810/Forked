@@ -57,32 +57,52 @@ export class LiveEngine {
   private cache = new Map<string, EngineUpdate>()
   private blackToMove = false
   private onUpdate: ((u: EngineUpdate) => void) | null = null
-  private lastFen: string | null = null
+  // The fen the caller currently wants analysis for — updated on every
+  // analyze() call regardless of whether a search is actually running for it
+  // yet. Used for the per-fen cache lookup, and to resume the right position
+  // on visibilitychange.
+  private targetFen: string | null = null
+  // The fen a `go` is ACTUALLY running for right now (set by startSearch,
+  // cleared implicitly by the fact that `searching` goes false on bestmove).
+  private currentFen: string | null = null
+  // True from the moment `go` is posted until that search's `bestmove`
+  // lands. UCI gives no per-search id, so this plus queuedFen below is how
+  // we tell "line belongs to the live search" from "line belongs to one we
+  // already abandoned".
+  private searching = false
+  // Design C — serialize on bestmove. Two earlier designs both broke against
+  // the real worker:
+  //  - A counter of bestmoves-to-swallow per interrupt: two interrupts before
+  //    either stale bestmove arrived pushed the counter to 2 and nothing ever
+  //    drained it again, permanently swallowing every future line (including
+  //    the terminal `bestmove (none)` on checkmate — UI stuck on "Loading
+  //    engine…").
+  //  - An isready/readyok fence: measured against the actual wasm build
+  //    (stockfish-18-lite-single.js), it does NOT answer `isready` while a
+  //    search is running — posting stop+isready mid-search yields the
+  //    interrupted search's bestmove but no readyok, repeatedly, for 3s+.
+  //    The fence never lifts, so every line is dropped forever. Do not
+  //    reintroduce a readyok-based gate in handleLine; readyok is only used
+  //    once, in start()'s pre-search handshake, where it IS reliable.
+  // The one thing the protocol reliably gives us is: a `bestmove` line
+  // always arrives for a search, on movetime expiry or shortly after `stop`.
+  // So queuedFen — the newest fen requested while a search is already running
+  // — is only acted on when that search's bestmove shows up; nothing else
+  // needs a timer, a counter, or a readyok.
+  private queuedFen: string | null = null
   private lastEmit = 0
   private pending: EngineUpdate | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
   // The three MultiPV slots for the current search; rebuilt from scratch on
-  // every analyze() so a new position never shows the old position's lines.
+  // every startSearch() so a new position never shows the old position's
+  // lines.
   private lineSlots: (EngineLine & { depth: number })[] = []
-  // Fence guard: after `analyze` posts `stop`, the interrupted search can
-  // still flush info/bestmove lines for a while — without this they'd be
-  // parsed with the NEW position's side-to-move and cached under the NEW
-  // fen (wrong, possibly sign-flipped evals). UCI has no per-search id, but
-  // `isready`/`readyok` is a hard barrier: everything the worker emits
-  // before OUR `readyok` belongs to a stale search, full stop. This used to
-  // be a counter of bestmoves-to-swallow, one per interrupt, but that broke
-  // the moment two interrupts landed before either stale search's bestmove
-  // arrived — the counter reached 2 and nothing ever drained it again,
-  // permanently swallowing every future line (including the terminal
-  // `bestmove (none)` on checkmate). The fence has no such failure mode: it
-  // only ever waits for the ONE readyok that answers the LATEST isready.
-  private fenced = false
   private onVisibility = () => {
     if (!this.worker) return
     if (document.hidden) {
       this.worker.postMessage('stop')
-    } else if (this.lastFen && this.onUpdate) {
-      this.analyze(this.lastFen, this.onUpdate)
+    } else if (this.targetFen && this.onUpdate) {
+      this.analyze(this.targetFen, this.onUpdate)
     }
   }
 
@@ -110,34 +130,41 @@ export class LiveEngine {
     document.addEventListener('visibilitychange', this.onVisibility)
   }
 
+  private startSearch(fen: string) {
+    if (!this.worker) return
+    this.currentFen = fen
+    this.blackToMove = fen.split(' ')[1] === 'b'
+    this.lineSlots = []
+    this.searching = true
+    this.queuedFen = null
+    this.worker.postMessage(`position fen ${fen}`)
+    // ponytail: movetime 8000 ceiling — deep enough for interactive analysis
+    // without letting one position hang the worker; raise if users complain.
+    this.worker.postMessage('go movetime 8000')
+  }
+
   private handleLine(line: string) {
-    if (line === 'readyok') {
-      this.fenced = false
-      // Every analyze() call posts its own stop+isready pair, so a rapid
-      // string of interrupts can queue several isready's before any of
-      // their readyok's come back. Each readyok that lands re-posts
-      // whatever `lastFen` is RIGHT NOW — i.e. the latest request — so an
-      // extra stale readyok just restarts the same (already-latest) search
-      // again. Wasteful, never wrong. ponytail: not worth a second counter
-      // to suppress it — that's the exact failure mode this fence replaces.
-      if (this.worker && this.lastFen) {
-        this.worker.postMessage(`position fen ${this.lastFen}`)
-        // ponytail: movetime 8000 ceiling — deep enough for interactive
-        // analysis without letting one position hang the worker; raise if
-        // users complain.
-        this.worker.postMessage('go movetime 8000')
-      }
-      return
-    }
-    if (this.fenced) return // belongs to a search that predates our readyok
     if (line.startsWith('bestmove')) {
+      this.searching = false
+      if (this.queuedFen !== null) {
+        // This bestmove belongs to the search we already abandoned (queuedFen
+        // was set the moment `stop` went out for it) — not a signal for
+        // anyone still listening, just the starting gun for the real target.
+        const next = this.queuedFen
+        this.startSearch(next)
+        return
+      }
       // FIX 3: `bestmove (none)` means no legal moves (checkmate/stalemate).
       // No `info ... pv ...` line ever arrives for this position, so without
       // this EngineLines would show "Loading engine…" forever.
       if (line.startsWith('bestmove (none)')) this.schedule({ depth: 0, lines: [], terminal: true })
       return
     }
-    if (!this.onUpdate) return
+    // Belongs to a search we've moved past (either not searching at all, or
+    // an interrupt is pending and this line predates the bestmove that will
+    // launch the queued search) — drop it rather than risk caching/emitting
+    // it under the wrong fen.
+    if (!this.searching || this.queuedFen !== null || !this.onUpdate) return
     const parsed = parseInfoLine(line, this.blackToMove)
     if (!parsed || parsed.depth < MIN_DEPTH) return
     this.lineSlots[parsed.multipv - 1] = { eval: parsed.eval, pvUci: parsed.pvUci, depth: parsed.depth }
@@ -169,7 +196,7 @@ export class LiveEngine {
   private emit(u: EngineUpdate) {
     this.lastEmit = Date.now()
     this.pending = null
-    if (this.lastFen) this.cache.set(this.lastFen, u)
+    if (this.currentFen) this.cache.set(this.currentFen, u)
     this.onUpdate?.(u)
   }
 
@@ -179,34 +206,44 @@ export class LiveEngine {
   // ever matters.
   analyze(fen: string, onUpdate: (u: EngineUpdate) => void): void {
     if (!this.worker) return
-    this.blackToMove = fen.split(' ')[1] === 'b'
     this.onUpdate = onUpdate
-    this.lastFen = fen
+    this.targetFen = fen
+    // Cancel any in-flight throttle timer left over from whatever was
+    // searching before — otherwise it could fire later and deliver a stale
+    // update (wrong fen's data) through `onUpdate`, which by then points at
+    // THIS call's callback.
     this.lastEmit = 0
     this.pending = null
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    this.lineSlots = []
 
     const cached = this.cache.get(fen)
     if (cached) onUpdate(cached)
 
-    // Fence the old search out: stop only matters if a search is running
-    // (harmless otherwise), and isready's readyok is the barrier — nothing
-    // the worker emits before it is trusted. handleLine() posts the actual
-    // `position`/`go` for whatever fen is latest once readyok arrives, so a
-    // burst of analyze() calls before that only ever searches the last one.
-    this.fenced = true
-    this.worker.postMessage('stop')
-    this.worker.postMessage('isready')
+    if (!this.searching) {
+      this.startSearch(fen)
+      return
+    }
+    // A search is already running. Only the newest target matters — the
+    // user has already moved past whatever was queued before — so overwrite
+    // queuedFen every time, but post `stop` only on the transition into
+    // "interrupt pending" (once posted, the running search is already on its
+    // way out; posting it again per analyze() call would just be a pile of
+    // redundant stops).
+    const alreadyInterrupting = this.queuedFen !== null
+    this.queuedFen = fen
+    if (!alreadyInterrupting) this.worker.postMessage('stop')
   }
 
-  // Also drops lastFen/onUpdate so a later visibilitychange doesn't restart
-  // a search on the abandoned position.
+  // Also drops targetFen/onUpdate so a later visibilitychange doesn't
+  // restart a search on the abandoned position, and drops queuedFen so a
+  // bestmove that's already in flight doesn't resurrect a search after an
+  // explicit stop().
   stop(): void {
     this.worker?.postMessage('stop')
     this.onUpdate = null
-    this.lastFen = null
+    this.targetFen = null
+    this.queuedFen = null
   }
 
   dispose(): void {
@@ -215,6 +252,6 @@ export class LiveEngine {
     this.worker?.terminate()
     this.worker = null
     this.onUpdate = null
-    this.lastFen = null
+    this.targetFen = null
   }
 }
