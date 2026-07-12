@@ -167,6 +167,10 @@ export const copy = {
     exploreEvalLine: (evalStr: string, depth: number, bestSan: string) =>
       `${evalStr} · depth ${depth}${bestSan ? ` · best: ${bestSan}` : ''}`,
     exploreUndo: 'Undo',
+    // Live engine lines panel (chess.com-style MultiPV list).
+    engineLinesLoading: 'Loading engine…',
+    engineLinesUnavailable: 'Engine unavailable — stored analysis still shown.',
+    engineDepth: (d: number) => `depth ${d}`,
     // Key-moves filter toggle above the move list.
     filterAll: 'All moves',
     filterKey: 'Key moves',

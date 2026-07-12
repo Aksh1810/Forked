@@ -755,6 +755,46 @@ tr.row-click {
   padding-top: 6px;
 }
 
+/* Live engine lines panel: fixed slot (depth line + 3 rows) so streaming
+   updates never shift the move list below. */
+.engine-lines {
+  height: 108px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.engine-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.engine-line-eval {
+  font-weight: 700;
+  min-width: 44px;
+}
+.engine-line-sans {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.engine-lines-depth {
+  font-size: 0.75rem;
+  margin: 0;
+}
+@media (hover: hover) {
+  .engine-line:hover {
+    background: color-mix(in srgb, var(--bone) 6%, transparent);
+  }
+}
+
 .coach-outcome p {
   margin: 0 0 2px;
   font-weight: 600;
