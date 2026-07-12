@@ -1,3 +1,6 @@
+'use client'
+
+import { useRef, useState } from 'react'
 import type { Enriched } from '@forked/shared'
 import { Piece } from './pieces'
 import { TIER } from './classification'
@@ -33,6 +36,20 @@ function squareAt(r: number, c: number, flip: boolean): string {
   const file = flip ? 7 - c : c
   const rank = flip ? r + 1 : 8 - r
   return `${String.fromCharCode(97 + file)}${rank}`
+}
+
+// Which square a viewport point lands on, given the board's bounding rect.
+// Used by the pointerup drop handler; exported for tests.
+export function squareFromPoint(
+  rect: { left: number; top: number; width: number; height: number },
+  x: number,
+  y: number,
+  flip: boolean,
+): string | null {
+  const c = Math.floor(((x - rect.left) / rect.width) * 8)
+  const r = Math.floor(((y - rect.top) / rect.height) * 8)
+  if (c < 0 || c > 7 || r < 0 || r > 7) return null
+  return squareAt(r, c, flip)
 }
 
 // Thick, translucent, rounded suggestion arrow (chess.com style): a wide
@@ -82,16 +99,21 @@ export function Board({
   // tint this by classification (orange for a mistake, green for best, ...).
   tint?: string
   badge?: { square: string; kind: Enriched }
-  // Retry mode (A2) and explore mode (Wave 2): click-only piece-then-destination
-  // selection. v1 has no drag and no keyboard support — a plain onClick per
-  // square is enough for the lite practice loop this powers.
-  // ponytail: click-only v1, no drag/keyboard.
+  // Retry mode (A2) and explore mode (Wave 2): click-and-drag piece-then
+  // -destination selection. No keyboard support yet.
   onSquareClick?: (sq: string) => void
   selectedSq?: string
   // Legal-move dots for the currently selected piece (retry + explore modes).
   // Callers compute this via chessops `pos.dests(fromIdx)`.
   dests?: string[]
 }) {
+  // Drag state: the square where the pointer went down (and its piece, for the
+  // ghost), plus the live pointer position. Click-to-move is unchanged — a
+  // pointerdown IS the click (select/deselect via the page's clickMove machine),
+  // and a pointerup over a different square completes the move.
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [drag, setDrag] = useState<{ from: string; piece: string; x: number; y: number } | null>(null)
+
   let grid = ranks(fen)
   if (flip) grid = grid.slice().reverse().map((row) => row.slice().reverse())
 
@@ -99,6 +121,21 @@ export function Board({
     <div
       role="img"
       aria-label={alt ?? 'chess position'}
+      ref={gridRef}
+      onPointerDown={onSquareClick ? (e) => e.currentTarget.setPointerCapture(e.pointerId) : undefined}
+      onPointerMove={drag ? (e) => setDrag({ ...drag, x: e.clientX, y: e.clientY }) : undefined}
+      onPointerUp={
+        onSquareClick && drag
+          ? (e) => {
+              const rect = gridRef.current?.getBoundingClientRect()
+              setDrag(null)
+              if (!rect) return
+              const target = squareFromPoint(rect, e.clientX, e.clientY, flip)
+              if (target && target !== drag.from) onSquareClick(target)
+            }
+          : undefined
+      }
+      onPointerCancel={() => setDrag(null)}
       style={{
         display: 'grid',
         // minmax(0, 1fr) on both axes: plain 1fr has an implicit auto MINIMUM,
@@ -111,6 +148,7 @@ export function Board({
         maxWidth: '100%',
         aspectRatio: '1 / 1',
         border: '1px solid var(--line)',
+        touchAction: onSquareClick ? 'none' : undefined,
       }}
     >
       {grid.flatMap((row, r) =>
@@ -122,7 +160,15 @@ export function Board({
           return (
             <div
               key={`${r}-${c}`}
-              onClick={onSquareClick ? () => onSquareClick(square) : undefined}
+              onPointerDown={
+                onSquareClick
+                  ? (e) => {
+                      e.preventDefault()
+                      onSquareClick(square)
+                      if (piece) setDrag({ from: square, piece, x: e.clientX, y: e.clientY })
+                    }
+                  : undefined
+              }
               style={{
                 position: 'relative',
                 display: 'grid',
@@ -235,6 +281,24 @@ export function Board({
             <Arrow key={i} from={a.from} to={a.to} color={a.color} flip={flip} />
           ))}
         </svg>
+      )}
+      {/* ponytail: no drag animation/snap, ghost only; promotion stays auto-queen. */}
+      {drag && selectedSq === drag.from && (
+        <div
+          style={{
+            position: 'fixed',
+            left: drag.x,
+            top: drag.y,
+            transform: 'translate(-50%, -50%)',
+            width: size / 8,
+            height: size / 8,
+            pointerEvents: 'none',
+            opacity: 0.85,
+            zIndex: 10,
+          }}
+        >
+          <Piece piece={drag.piece} />
+        </div>
       )}
     </div>
   )
