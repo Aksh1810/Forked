@@ -5,19 +5,22 @@ import type { Classification, Eval, EngineRecord } from './schemas.js'
 import { moverWinPct } from './win.js'
 
 // Classification is based on the mover's win-probability swing, in percentage
-// points: a loss of 30 or more is a blunder, 20 or more a mistake, 10 or more
-// an inaccuracy. In already-decided positions (mover below 10 or above 90
-// before the move) classification is suppressed, EXCEPT when the move crosses
-// from 60 or above down to 40 or below, which throws away a winning position
-// and is always flagged.
+// points: a loss of 22 or more is a blunder, 12 or more a mistake, 8 or more
+// an inaccuracy (WintrChess reference bands — the previous 10/20/30 bands ran
+// a whole tier too lenient vs chess.com's CAPS2, e.g. scoring zero
+// mistakes/blunders on a game chess.com called 2 mistakes/10 misses). In
+// already-decided positions (mover below 10 or above 90 before the move)
+// classification is suppressed, EXCEPT when the move crosses from 60 or above
+// down to 40 or below, which throws away a winning position and is always
+// flagged.
 export function classifyWinPctSwing(wpBefore: number, wpAfter: number): Classification {
   const throwAway = wpBefore >= 60 && wpAfter <= 40
   const decided = wpBefore < 10 || wpBefore > 90
   if (decided && !throwAway) return 'none'
   const loss = wpBefore - wpAfter
-  if (loss >= 30) return 'blunder'
-  if (loss >= 20) return 'mistake'
-  if (loss >= 10) return 'inaccuracy'
+  if (loss >= 22) return 'blunder'
+  if (loss >= 12) return 'mistake'
+  if (loss >= 8) return 'inaccuracy'
   return 'none'
 }
 
@@ -41,8 +44,8 @@ export function classifyLive(
     return 'mistake'
   }
   if (base !== 'none') return base
-  if (loss < 2) return 'excellent'
-  if (loss < 10) return 'good'
+  if (loss < 4.5) return 'excellent'
+  if (loss < 8) return 'good'
   return 'none'
 }
 
@@ -88,9 +91,17 @@ function mateAgainstMover(ev: Eval | null, mover: 'white' | 'black'): boolean {
 }
 
 // One tier per ply, in order. Rule order matters (first match wins):
-// book -> stored bad tier (relabeled to 'miss' when it threw away an
-// opponent blunder) -> played-the-best-move (brilliant/great/best) ->
-// excellent/good/none by win-pct loss.
+// book -> a bad tier freshly computed from this ply's win-pct swing
+// (relabeled to 'miss' when it threw away an opponent blunder) ->
+// played-the-best-move (brilliant/great/best) -> excellent/good/none by
+// win-pct loss.
+//
+// The bad tier is recomputed here via classifyWinPctSwing rather than read
+// off the stored p.classification: that enum was written at analysis time
+// with whatever band thresholds existed then, so an already-analyzed game
+// would keep stale tiers forever if we trusted it. Recomputing from the
+// wpBefore/wpAfter this loop already has means already-analyzed games
+// re-render with current bands with no re-analysis needed.
 //
 // ponytail: no static-exchange evaluation and no true "only move" detection
 // (MultiPV line 2 is discarded at analysis time, uci.ts) — the sacrifice and
@@ -122,18 +133,20 @@ export function enrichClassifications(record: EngineRecord): Enriched[] {
     const enPassant = fromRole === 'pawn' && p.played[0] !== p.played[2] && !destRole
     const capturedValue = enPassant ? PIECE_VALUE.pawn : pieceValue(destRole)
 
+    const swing = classifyWinPctSwing(wpBefore, wpAfter)
+
     let tier: Enriched
     if (p.book) {
       tier = 'book'
-    } else if (p.classification !== 'none') {
+    } else if (swing !== 'none') {
       // Relabel: the opponent just handed the mover a big edge (>=20 win-pts)
       // and the mover was still comfortably ahead (>=70) going into this
       // move — a miss, not just a mistake/inaccuracy/blunder.
-      tier = prevLoss >= 20 && wpBefore >= 70 ? 'miss' : p.classification
-      // Blunder gate (chess.com classification-v2 style): a stored 'blunder'
-      // keeps that display tier only when it's catastrophic — otherwise it
-      // reads as a plain mistake. ponytail: win%-swing + terminal signals
-      // only, no material-hang/SEE detection to size the actual damage.
+      tier = prevLoss >= 20 && wpBefore >= 70 ? 'miss' : swing
+      // Blunder gate (chess.com classification-v2 style): a 'blunder' keeps
+      // that display tier only when it's catastrophic — otherwise it reads
+      // as a plain mistake. ponytail: win%-swing + terminal signals only,
+      // no material-hang/SEE detection to size the actual damage.
       if (tier === 'blunder' && !mateAgainstMover(p.evalAfter, mover) && loss < 40 && wpAfter > 15) {
         tier = 'mistake'
       }
@@ -152,9 +165,9 @@ export function enrichClassifications(record: EngineRecord): Enriched[] {
       if (sac && wpBefore < 95 && wpAfter >= 40) tier = 'brilliant'
       else if (prevLoss >= 20) tier = 'great' // found the punish for the opponent's previous blunder
       else tier = 'best'
-    } else if (loss < 2) {
+    } else if (loss < 4.5) {
       tier = 'excellent'
-    } else if (loss < 10) {
+    } else if (loss < 8) {
       tier = 'good'
     } else {
       tier = 'none'

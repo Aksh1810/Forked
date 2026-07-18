@@ -2,16 +2,18 @@ import type { EngineRecord, Eval } from './schemas.js'
 import { GAME_PHASES, gamePhases, type GamePhase } from './phases.js'
 import { moverWinPct } from './win.js'
 
-// Reference formula: lichess's published move-accuracy curve
-// (lila, AccuracyPercent.scala):
-//   accuracy = 103.1668 * exp(-0.04354 * winDiff) - 3.1669, clamped to 0..100
-// where winDiff is win-probability loss in percentage points. Per spec, game
-// accuracy applies this curve to the AVERAGE win-probability loss across the
-// player's moves. Book plies are excluded: they are excluded from move
-// classification entirely and are analyzed at a reduced node budget, so their
-// pseudo-losses would pollute the average.
-export function accuracyFromAvgLoss(avgLossPct: number): number {
-  const a = 103.1668 * Math.exp(-0.04354 * avgLossPct) - 3.1669
+// Reference formula: WintrChess (wintrcat/wintrchess, shared/src/lib/reporter/*),
+// the strongest public reconstruction of chess.com's proprietary CAPS2.
+// Applied PER MOVE, then game accuracy is the plain arithmetic mean of move
+// accuracies — never the curve applied to the average loss. Averaging loss
+// first and curving once (the old accuracyFromAvgLoss shortcut) is wrong by
+// Jensen's inequality: the curve is convex over the relevant range, so a
+// spiky game (many perfect moves + a couple of disasters) scores HIGHER on
+// the averaged-loss path than the honest per-move mean, even at the same
+// average loss. That was the root cause of our accuracy reading ~88% on a
+// game chess.com scored 64.7%.
+export function moveAccuracyPct(lossPct: number): number {
+  const a = 103.16 * Math.exp(-0.04 * lossPct) - 3.17
   return Math.min(100, Math.max(0, a))
 }
 
@@ -19,7 +21,7 @@ export function gameAccuracies(
   record: Pick<EngineRecord, 'startEval' | 'plies'>,
   terminal: 'checkmate' | 'stalemate' | null,
 ): { white: number | null; black: number | null } {
-  const losses = { white: [] as number[], black: [] as number[] }
+  const accs = { white: [] as number[], black: [] as number[] }
   let before: Eval = record.startEval
   for (const p of record.plies) {
     const mover = p.ply % 2 === 1 ? 'white' : 'black'
@@ -30,12 +32,14 @@ export function gameAccuracies(
           ? 100
           : 50
         : moverWinPct(p.evalAfter, mover)
-    if (!p.book) losses[mover].push(Math.max(0, wpBefore - wpAfter))
+    // Book plies count as full credit (chess.com/WintrChess grade theory as
+    // free) rather than being scored off their reduced-node-budget eval,
+    // whose pseudo-loss would otherwise pollute the mean.
+    accs[mover].push(p.book ? 100 : moveAccuracyPct(Math.max(0, wpBefore - wpAfter)))
     if (p.evalAfter !== null) before = p.evalAfter
   }
-  const acc = (xs: number[]) =>
-    xs.length ? accuracyFromAvgLoss(xs.reduce((a, b) => a + b, 0) / xs.length) : null
-  return { white: acc(losses.white), black: acc(losses.black) }
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
+  return { white: mean(accs.white), black: mean(accs.black) }
 }
 
 // Same loss walk as gameAccuracies, but bucketed by game phase instead of
@@ -53,7 +57,7 @@ export function phaseAccuracies(
   }
   const phaseOf = gamePhases(record.uciMoves, bookPlies)
 
-  const losses: Record<GamePhase, { white: number[]; black: number[] }> = {
+  const accs: Record<GamePhase, { white: number[]; black: number[] }> = {
     opening: { white: [], black: [] },
     middlegame: { white: [], black: [] },
     endgame: { white: [], black: [] },
@@ -68,13 +72,14 @@ export function phaseAccuracies(
           ? 100
           : 50
         : moverWinPct(p.evalAfter, mover)
-    if (!p.book) losses[phaseOf[p.ply - 1]][mover].push(Math.max(0, wpBefore - wpAfter))
+    // Book plies land in the opening bucket (phaseOf already routes leading
+    // plies there) at full credit — same reasoning as gameAccuracies.
+    accs[phaseOf[p.ply - 1]][mover].push(p.book ? 100 : moveAccuracyPct(Math.max(0, wpBefore - wpAfter)))
     if (p.evalAfter !== null) before = p.evalAfter
   }
 
-  const acc = (xs: number[]) =>
-    xs.length ? accuracyFromAvgLoss(xs.reduce((a, b) => a + b, 0) / xs.length) : null
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
   const out = {} as Record<GamePhase, { white: number | null; black: number | null }>
-  for (const phase of GAME_PHASES) out[phase] = { white: acc(losses[phase].white), black: acc(losses[phase].black) }
+  for (const phase of GAME_PHASES) out[phase] = { white: mean(accs[phase].white), black: mean(accs[phase].black) }
   return out
 }

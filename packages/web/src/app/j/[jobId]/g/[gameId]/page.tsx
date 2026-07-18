@@ -184,13 +184,15 @@ function SummaryCard({
   )
 }
 
-// Game-performance rating estimated from move accuracy. Heuristic power fit:
-// 99% ≈ 2980, 90% ≈ 2030, 80% ≈ 1270, 70% ≈ 740 — close enough to how the
-// big sites read. ponytail: accuracy-only estimate; blend in opponent rating
-// and game length if it ever needs to be defensible.
+// Game-performance rating estimated from move accuracy. Heuristic power fit,
+// exponent 5, recalibrated against a real chess.com Game Review side-by-side
+// (Apertito vs Akshx999, 17 Jul 26): 64.7% -> ~350, 57% -> ~190 matched
+// chess.com's 500/150; 90% -> ~1830, 99% -> ~2950 anchor the top end.
+// ponytail: accuracy-only estimate; blend in opponent rating and game length
+// if it ever needs to be defensible.
 function estimatedElo(accuracy: number): number {
-  const elo = 3100 * Math.pow(Math.min(accuracy, 100) / 100, 4)
-  return Math.max(250, Math.round(elo / 10) * 10)
+  const elo = 3100 * Math.pow(Math.min(accuracy, 100) / 100, 5)
+  return Math.max(100, Math.round(elo / 10) * 10)
 }
 
 // Retry mode's coach-card slot (A2): swaps in for CoachCard while retrying

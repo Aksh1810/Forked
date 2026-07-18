@@ -77,13 +77,25 @@ const record: EngineRecord = {
   ],
 }
 
+// Re-pinned for the WintrChess bands (F2: inaccuracy>=8/mistake>=12/blunder>=22,
+// excellent<4.5/good<8) and F3 (tier derived from the recomputed swing, not
+// p.classification). Recomputed with an independent scratch reimplementation
+// of classifyWinPctSwing/enrichClassifications (not by running this suite and
+// copying its output) — the notable change from the old pins is ply 12
+// ('inaccuracy' -> 'excellent'): its evalAfter is actually a 10-pt GAIN
+// (64.99% -> 74.98%) for white, so the swing is 'none' regardless of bands;
+// only F3's move from a trusted stale p.classification override ('inaccuracy'
+// in the fixture) to the recomputed swing changes what shows up here — ply 8
+// ('great') is unaffected: wpBefore there rounds to 90.009% (just over the
+// decided-position cutoff of 90), so classifyWinPctSwing still suppresses to
+// 'none' and the played-best/prevLoss>=20 'great' path still wins.
 test('golden record: enrichClassifications output is pinned', () => {
   expect(enrichClassifications(record)).toEqual([
     'book', 'book', 'book', 'book',
     'best', 'best',
     'blunder', 'great',
     'best', 'good',
-    'best', 'inaccuracy',
+    'best', 'excellent',
   ])
 })
 
@@ -91,8 +103,12 @@ test('golden record: turningPoint is pinned', () => {
   expect(turningPoint(record)).toBe(7)
 })
 
+// Re-pinned for F1 (per-move accuracy then plain mean, book plies at 100
+// instead of excluded). Both numbers rise sharply from the old pins (62.12 /
+// 84.44) mainly because the 4 leading book plies now score 100 each instead
+// of being dropped from the average entirely.
 test('golden record: gameAccuracies is pinned', () => {
   const acc = gameAccuracies(record, null)
-  expect(acc.white).toBeCloseTo(62.1219, 4)
-  expect(acc.black).toBeCloseTo(84.4380, 4)
+  expect(acc.white).toBeCloseTo(86.0002, 3)
+  expect(acc.black).toBeCloseTo(91.2002, 3)
 })
