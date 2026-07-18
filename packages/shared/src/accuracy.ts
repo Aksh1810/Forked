@@ -2,18 +2,20 @@ import type { EngineRecord, Eval } from './schemas.js'
 import { GAME_PHASES, gamePhases, type GamePhase } from './phases.js'
 import { moverWinPct } from './win.js'
 
-// Reference formula: WintrChess (wintrcat/wintrchess, shared/src/lib/reporter/*),
-// the strongest public reconstruction of chess.com's proprietary CAPS2.
+// Curve constants are an empirical fit against chess.com's own published
+// per-game accuracies (chess.com public API `accuracies` field), 5 games x 2
+// colors = 10 data points, July 2026, rmse 5.75 — NOT the lichess/wintrchess
+// curve. Anchor game: Apertito-vs-Akshx999, chess.com accuracies 64.68/56.97.
 // Applied PER MOVE, then game accuracy is the plain arithmetic mean of move
 // accuracies — never the curve applied to the average loss. Averaging loss
 // first and curving once (the old accuracyFromAvgLoss shortcut) is wrong by
 // Jensen's inequality: the curve is convex over the relevant range, so a
 // spiky game (many perfect moves + a couple of disasters) scores HIGHER on
 // the averaged-loss path than the honest per-move mean, even at the same
-// average loss. That was the root cause of our accuracy reading ~88% on a
-// game chess.com scored 64.7%.
+// average loss.
+// ponytail: refit when more reviewed games accumulate.
 export function moveAccuracyPct(lossPct: number): number {
-  const a = 103.16 * Math.exp(-0.04 * lossPct) - 3.17
+  const a = 158 * Math.exp(-0.11 * lossPct) - 58
   return Math.min(100, Math.max(0, a))
 }
 

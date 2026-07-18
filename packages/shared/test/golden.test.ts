@@ -77,24 +77,26 @@ const record: EngineRecord = {
   ],
 }
 
-// Re-pinned for the WintrChess bands (F2: inaccuracy>=8/mistake>=12/blunder>=22,
-// excellent<4.5/good<8) and F3 (tier derived from the recomputed swing, not
-// p.classification). Recomputed with an independent scratch reimplementation
-// of classifyWinPctSwing/enrichClassifications (not by running this suite and
-// copying its output) — the notable change from the old pins is ply 12
-// ('inaccuracy' -> 'excellent'): its evalAfter is actually a 10-pt GAIN
-// (64.99% -> 74.98%) for white, so the swing is 'none' regardless of bands;
-// only F3's move from a trusted stale p.classification override ('inaccuracy'
-// in the fixture) to the recomputed swing changes what shows up here — ply 8
-// ('great') is unaffected: wpBefore there rounds to 90.009% (just over the
-// decided-position cutoff of 90), so classifyWinPctSwing still suppresses to
-// 'none' and the played-best/prevLoss>=20 'great' path still wins.
+// Re-pinned for the chess.com-calibrated bands (inaccuracy>=4/mistake>=7.5/
+// blunder>=25, excellent<2/good<4) with decided-position suppression
+// deleted entirely. Recomputed with an independent scratch reimplementation
+// of classifyWinPctSwing/enrichClassifications (not by running this suite
+// and copying its output). The notable change from the pre-calibration pins
+// is ply 8: it used to read 'great' because wpBefore rounded to 90.009%,
+// just over the old decided-position cutoff of 90, so classifyWinPctSwing
+// suppressed to 'none' and the played-best/prevLoss>=20 'great' path won by
+// default. With suppression deleted, ply 8's loss (10.0381, wpBefore 90.009
+// -> wpAfter 79.971) is a plain 'mistake' swing, and prevLoss (ply 7's
+// 42.033-pt blunder) >=7.5 with wpBefore>=70 fires the miss-relabel branch
+// first, so ply 8 now reads 'miss' instead of 'great' — the swing branch is
+// checked before the played-best branch, so removing suppression changes
+// which branch gets there first, not just the swing's own threshold.
 test('golden record: enrichClassifications output is pinned', () => {
   expect(enrichClassifications(record)).toEqual([
     'book', 'book', 'book', 'book',
     'best', 'best',
-    'blunder', 'great',
-    'best', 'good',
+    'blunder', 'miss',
+    'best', 'inaccuracy',
     'best', 'excellent',
   ])
 })
@@ -103,12 +105,17 @@ test('golden record: turningPoint is pinned', () => {
   expect(turningPoint(record)).toBe(7)
 })
 
-// Re-pinned for F1 (per-move accuracy then plain mean, book plies at 100
-// instead of excluded). Both numbers rise sharply from the old pins (62.12 /
-// 84.44) mainly because the 4 leading book plies now score 100 each instead
-// of being dropped from the average entirely.
+// Re-pinned for the new curve (158*exp(-0.11x)-58, clamp point ~9.11 win-pts).
+// White's 6 moves (plies 1,3,5,7,9,11): book, book, quiet gain (acc 100),
+// ply 7's own 42.033-pt blunder (well past the clamp, acc 0), quiet gain
+// (100), quiet gain (100). White accs = [100, 100, 100, 0, 100, 100] ->
+// mean 500/6 = 83.3333.
+// Black's 6 moves (plies 2,4,6,8,10,12): book, book, quiet gain (100),
+// ply 8's 10.0381-pt loss (past the clamp, acc 0), ply 10's 4.9834-pt loss
+// (158*exp(-0.11*4.9834)-58 = 33.3243), quiet gain (100). Black accs =
+// [100, 100, 100, 0, 33.3243, 100] -> mean 433.3243/6 = 72.2207.
 test('golden record: gameAccuracies is pinned', () => {
   const acc = gameAccuracies(record, null)
-  expect(acc.white).toBeCloseTo(86.0002, 3)
-  expect(acc.black).toBeCloseTo(91.2002, 3)
+  expect(acc.white).toBeCloseTo(83.3333, 3)
+  expect(acc.black).toBeCloseTo(72.2207, 3)
 })

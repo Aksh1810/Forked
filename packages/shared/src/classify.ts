@@ -5,22 +5,16 @@ import type { Classification, Eval, EngineRecord } from './schemas.js'
 import { moverWinPct } from './win.js'
 
 // Classification is based on the mover's win-probability swing, in percentage
-// points: a loss of 22 or more is a blunder, 12 or more a mistake, 8 or more
-// an inaccuracy (WintrChess reference bands — the previous 10/20/30 bands ran
-// a whole tier too lenient vs chess.com's CAPS2, e.g. scoring zero
-// mistakes/blunders on a game chess.com called 2 mistakes/10 misses). In
-// already-decided positions (mover below 10 or above 90 before the move)
-// classification is suppressed, EXCEPT when the move crosses from 60 or above
-// down to 40 or below, which throws away a winning position and is always
-// flagged.
+// points: a loss of 25 or more is a blunder, 7.5 or more a mistake, 4 or more
+// an inaccuracy. Bands calibrated against a real chess.com Game Review (the
+// 7.5 mistake threshold reproduces its mistake/miss counts exactly on the
+// reference game). No decided-position suppression: the calibrated bands
+// count decided-position errors the same way chess.com's Game Review does.
 export function classifyWinPctSwing(wpBefore: number, wpAfter: number): Classification {
-  const throwAway = wpBefore >= 60 && wpAfter <= 40
-  const decided = wpBefore < 10 || wpBefore > 90
-  if (decided && !throwAway) return 'none'
   const loss = wpBefore - wpAfter
-  if (loss >= 22) return 'blunder'
-  if (loss >= 12) return 'mistake'
-  if (loss >= 8) return 'inaccuracy'
+  if (loss >= 25) return 'blunder'
+  if (loss >= 7.5) return 'mistake'
+  if (loss >= 4) return 'inaccuracy'
   return 'none'
 }
 
@@ -44,8 +38,8 @@ export function classifyLive(
     return 'mistake'
   }
   if (base !== 'none') return base
-  if (loss < 4.5) return 'excellent'
-  if (loss < 8) return 'good'
+  if (loss < 2) return 'excellent'
+  if (loss < 4) return 'good'
   return 'none'
 }
 
@@ -139,10 +133,10 @@ export function enrichClassifications(record: EngineRecord): Enriched[] {
     if (p.book) {
       tier = 'book'
     } else if (swing !== 'none') {
-      // Relabel: the opponent just handed the mover a big edge (>=20 win-pts)
+      // Relabel: the opponent just handed the mover a big edge (>=7.5 win-pts)
       // and the mover was still comfortably ahead (>=70) going into this
       // move — a miss, not just a mistake/inaccuracy/blunder.
-      tier = prevLoss >= 20 && wpBefore >= 70 ? 'miss' : swing
+      tier = prevLoss >= 7.5 && wpBefore >= 70 ? 'miss' : swing
       // Blunder gate (chess.com classification-v2 style): a 'blunder' keeps
       // that display tier only when it's catastrophic — otherwise it reads
       // as a plain mistake. ponytail: win%-swing + terminal signals only,
@@ -165,9 +159,9 @@ export function enrichClassifications(record: EngineRecord): Enriched[] {
       if (sac && wpBefore < 95 && wpAfter >= 40) tier = 'brilliant'
       else if (prevLoss >= 20) tier = 'great' // found the punish for the opponent's previous blunder
       else tier = 'best'
-    } else if (loss < 4.5) {
+    } else if (loss < 2) {
       tier = 'excellent'
-    } else if (loss < 8) {
+    } else if (loss < 4) {
       tier = 'good'
     } else {
       tier = 'none'
