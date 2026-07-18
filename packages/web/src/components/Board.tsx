@@ -181,7 +181,12 @@ export function Board({
         maxWidth: '100%',
         aspectRatio: '1 / 1',
         border: '1px solid var(--line)',
-        touchAction: onSquareClick ? 'none' : undefined,
+        // I3: 'none' only while an actual drag is in flight — a clickable
+        // board otherwise allows vertical page scroll (pan-y). `drag` is set
+        // on pointerdown and cleared on pointerup/cancel, so this already
+        // tracks the in-progress-drag window without extra imperative DOM
+        // writes.
+        touchAction: drag ? 'none' : onSquareClick ? 'pan-y' : undefined,
       }}
     >
       {grid.flatMap((row, r) =>

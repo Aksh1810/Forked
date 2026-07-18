@@ -20,11 +20,11 @@ import {
   type Motif,
 } from '@forked/shared'
 import { Board } from '../../../../../components/Board'
-import { AccuracyRing, KEY_TIERS, TIER, TierIcon } from '../../../../../components/classification'
+import { TIER, TierIcon, tierTint } from '../../../../../components/classification'
 import { EvalBar } from '../../../../../components/EvalBar'
 import { CoachCard, EvalGraph, MoveList } from '../../../../../components/EvalGraph'
 import { EngineLines } from '../../../../../components/EngineLines'
-import { copy, formatDate } from '../../../../../copy'
+import { copy, formatDate, phaseLabels } from '../../../../../copy'
 import { getGameReport, getJob, type GameReport } from '../../../../../lib/api'
 import { LiveEngine, type EngineUpdate } from '../../../../../lib/engine'
 import { clickMove, destsFor } from '../../../../../lib/moves'
@@ -69,22 +69,10 @@ function motifLine(m: Motif | null): string | null {
   }
 }
 
-const PHASE_LABEL: Record<GamePhase, string> = {
-  opening: copy.coach.phaseOpening,
-  middlegame: copy.coach.phaseMiddlegame,
-  endgame: copy.coach.phaseEndgame,
-}
-
-// Plain +/-1 stepping, or (in the Key filter) the nearest key-tier ply in
-// that direction — falling back to plain stepping when there is no further
-// key ply. Shared by the toolbar buttons, the Next button, and the
-// arrow-key handler so all three "next key moment" the same way.
-function stepTo(current: number | null, dir: 1 | -1, total: number, filter: 'all' | 'key', keyPlies: number[]): number | null {
-  const plain = dir === 1 ? Math.min(total, (current ?? 0) + 1) : current === null || current <= 1 ? null : current - 1
-  if (filter !== 'key') return plain
-  const cur = current ?? 0
-  const next = dir === 1 ? keyPlies.find((p) => p > cur) : [...keyPlies].reverse().find((p) => p < cur)
-  return next ?? plain
+// Plain +/-1 stepping, shared by the toolbar buttons and the arrow-key
+// handler. ArrowLeft from move 1 steps to the start position (null).
+function stepTo(current: number | null, dir: 1 | -1, total: number): number | null {
+  return dir === 1 ? Math.min(total, (current ?? 0) + 1) : current === null || current <= 1 ? null : current - 1
 }
 
 // The single-game wait (~10s): the status line plus an indeterminate sweep
@@ -116,9 +104,8 @@ function SummaryCard({
   blackAcc,
   phaseAcc,
   enriched,
-  turning,
-  turningSan,
-  onSelectTurning,
+  verdict,
+  onSelect,
 }: {
   white: string
   black: string
@@ -126,9 +113,10 @@ function SummaryCard({
   blackAcc: number | null
   phaseAcc: Record<GamePhase, { white: number | null; black: number | null }>
   enriched: Enriched[]
-  turning: number | null
-  turningSan: string | null
-  onSelectTurning: (ply: number) => void
+  // E2: one-line verdict, reusing the same outcomeLine() the end-of-review
+  // closure uses. Null for an unfinished/unresolved game.
+  verdict: string | null
+  onSelect: (ply: number) => void
 }) {
   const counts = { white: {} as Record<Enriched, number>, black: {} as Record<Enriched, number> }
   for (const t of SUMMARY_ROWS) {
@@ -140,30 +128,32 @@ function SummaryCard({
     counts[i % 2 === 0 ? 'white' : 'black'][t] += 1
   })
   const rows = SUMMARY_ROWS.filter((t) => SUMMARY_ALWAYS.has(t) || counts.white[t] > 0 || counts.black[t] > 0)
+  // E2: the CTA that jumps straight to the first thing worth reviewing.
+  const firstBlunderPly = enriched.findIndex((t) => t === 'mistake' || t === 'miss' || t === 'blunder') + 1
+  const blunderCount = enriched.reduce((n, t) => (t === 'mistake' || t === 'miss' || t === 'blunder' ? n + 1 : n), 0)
 
   return (
     <div className="coach-card summary-card">
-      {turning !== null && turningSan && (
-        <button
-          className="chip-button"
-          style={{ width: '100%', textAlign: 'left', marginBottom: 8 }}
-          onClick={() => onSelectTurning(turning)}
-        >
-          {copy.coach.turnedOn(String(Math.ceil(turning / 2)), turningSan)}
+      {verdict && <p className="quiet" style={{ margin: '0 0 6px' }}>{verdict}</p>}
+      {blunderCount > 0 && (
+        <button className="chip-button" style={{ marginBottom: 8 }} onClick={() => onSelect(firstBlunderPly)}>
+          {copy.coach.stepBlunders(blunderCount)}
         </button>
       )}
       <div className="summary-heads mono">
         <span>{white}</span>
         <span>{black}</span>
       </div>
+      {/* E1: the headline is the accuracy % itself now; est. Elo demotes to
+          the small qualified line underneath. */}
       <div className="summary-heads mono" style={{ alignItems: 'center' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {whiteAcc !== null && <AccuracyRing pct={whiteAcc} />}
-          {whiteAcc !== null ? copy.coach.accuracy : '—'}
+        <span className="summary-elo">
+          {whiteAcc !== null ? `${whiteAcc.toFixed(1)}%` : '—'}
+          <span className="summary-elo-label">{whiteAcc !== null ? copy.coach.estEloLine(estimatedElo(whiteAcc)) : ''}</span>
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {blackAcc !== null && <AccuracyRing pct={blackAcc} />}
-          {blackAcc !== null ? copy.coach.accuracy : '—'}
+        <span className="summary-elo" style={{ textAlign: 'right' }}>
+          {blackAcc !== null ? `${blackAcc.toFixed(1)}%` : '—'}
+          <span className="summary-elo-label">{blackAcc !== null ? copy.coach.estEloLine(estimatedElo(blackAcc)) : ''}</span>
         </span>
       </div>
       <table className="summary-table mono quiet">
@@ -171,7 +161,7 @@ function SummaryCard({
           {GAME_PHASES.map((ph) => (
             <tr key={ph}>
               <td>{phaseAcc[ph].white !== null ? `${phaseAcc[ph].white.toFixed(1)}%` : '—'}</td>
-              <td className="summary-label">{PHASE_LABEL[ph]}</td>
+              <td className="summary-label">{phaseLabels[ph]}</td>
               <td>{phaseAcc[ph].black !== null ? `${phaseAcc[ph].black.toFixed(1)}%` : '—'}</td>
             </tr>
           ))}
@@ -192,6 +182,15 @@ function SummaryCard({
       </table>
     </div>
   )
+}
+
+// Game-performance rating estimated from move accuracy. Heuristic power fit:
+// 99% ≈ 2980, 90% ≈ 2030, 80% ≈ 1270, 70% ≈ 740 — close enough to how the
+// big sites read. ponytail: accuracy-only estimate; blend in opponent rating
+// and game length if it ever needs to be defensible.
+function estimatedElo(accuracy: number): number {
+  const elo = 3100 * Math.pow(Math.min(accuracy, 100) / 100, 4)
+  return Math.max(250, Math.round(elo / 10) * 10)
 }
 
 // Retry mode's coach-card slot (A2): swaps in for CoachCard while retrying
@@ -249,6 +248,10 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   const { jobId, gameId } = use(params)
   const [report, setReport] = useState<GameReport | null>(null)
   const [missing, setMissing] = useState(false)
+  // K6: distinct from `missing` — a run of network failures (not a
+  // confirmed-absent record) gives up into an error line instead of an
+  // infinite sweep.
+  const [pollFailed, setPollFailed] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
   const [preview, setPreview] = useState(false)
   // Retry mode (A2): separate from preview so a reveal-after-wrong-guess can
@@ -287,9 +290,9 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // failed instead of flipping to 'ready'.
   const engineStartRef = useRef<Promise<void> | null>(null)
   const [backHref, setBackHref] = useState(`/j/${jobId}/breakdown`)
-  const [filter, setFilter] = useState<'all' | 'key'>('all')
   const plyInitedRef = useRef(false)
   const notFoundStreakRef = useRef(0)
+  const netFailStreakRef = useRef(0)
 
   // Back to the games list when this game was analyzed on its own.
   useEffect(() => {
@@ -313,6 +316,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     let stop = false
     let timer: ReturnType<typeof setTimeout>
     notFoundStreakRef.current = 0
+    netFailStreakRef.current = 0
     const startedAt = Date.now()
     function schedule() {
       timer = setTimeout(tick, Date.now() - startedAt > 60_000 ? 5000 : 1500)
@@ -333,9 +337,22 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
         return
       }
       notFoundStreakRef.current = 0
-      if (r?.record) {
+      if (r === null) {
+        // K6: a network failure (distinct from the API's own 'notFound')
+        // used to just reschedule forever — count it toward the same kind
+        // of give-up as notFound, with its own error line.
+        netFailStreakRef.current += 1
+        if (netFailStreakRef.current >= 8) {
+          setPollFailed(true)
+          return
+        }
+        schedule()
+        return
+      }
+      netFailStreakRef.current = 0
+      if (r.record) {
         setReport(r)
-      } else if (r && r.status === 'failed') {
+      } else if (r.status === 'failed') {
         setMissing(true)
       } else {
         schedule()
@@ -353,16 +370,9 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
 
   const sans = useMemo(() => (record ? sanMoves(record.uciMoves) : []), [record])
   const enriched = useMemo(() => (record ? enrichClassifications(record) : []), [record])
-  // Plies whose enriched tier is "key" (same set as the eval-graph dots and
-  // move-list filter), in order — the jump targets for A5 key-moment stepping.
-  const keyPlies = useMemo(
-    () => enriched.flatMap((t, i) => (KEY_TIERS.has(t) ? [i + 1] : [])),
-    [enriched],
-  )
 
   // Arrow-key move stepping; ArrowLeft from move 1 steps back to the start
-  // position (selected null), ArrowRight from the start goes to move 1. In
-  // the Key filter this jumps to the nearest key ply instead (see stepTo).
+  // position (selected null), ArrowRight from the start goes to move 1.
   // A 0-ply record (no analyzed moves) is a no-op.
   // FIX 4 (spec §2): stepping always DISCARDS an active branch and steps the
   // mainline — it does not repurpose the arrow keys as branch-undo. Undo
@@ -375,11 +385,11 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
       setBranch(null)
       pendingJudgeRef.current = null
       setBranchBadge(null)
-      setSelected((s) => stepTo(s, e.key === 'ArrowRight' ? 1 : -1, total, filter, keyPlies))
+      setSelected((s) => stepTo(s, e.key === 'ArrowRight' ? 1 : -1, total))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [total, filter, keyPlies])
+  }, [total])
 
   // Best-move preview is a one-off look; any new selection cancels it.
   useEffect(() => setPreview(false), [selected])
@@ -550,6 +560,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     }
   }, [record, selected, sans])
 
+  if (pollFailed) return <main className="flow"><p className="quiet">{copy.outage.gamePoll}</p></main>
   if (missing) return <main className="flow"><p className="quiet">{copy.browse.noAnalysis}</p></main>
   if (!report?.record || !record) {
     return (
@@ -611,7 +622,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     const last = branch.moves[branch.moves.length - 1]
     if (last) lastMove = { from: last.slice(0, 2), to: last.slice(2, 4) }
     badge = branchBadge ?? undefined
-    tint = branchBadge ? `${TIER[branchBadge.kind].color}66` : undefined
+    tint = branchBadge ? tierTint(branchBadge.kind) : undefined
     if (liveUpdate?.lines[0]?.pvUci[0]) {
       const pv0 = liveUpdate.lines[0].pvUci[0]
       arrows = [{ from: pv0.slice(0, 2), to: pv0.slice(2, 4), color: 'var(--best)' }]
@@ -622,12 +633,12 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     const dest = ply.best.slice(2, 4)
     badge = { square: dest, kind: 'best' }
     lastMove = { from: ply.best.slice(0, 2), to: dest }
-    tint = `${TIER.best.color}66`
+    tint = tierTint('best')
   } else if (ply) {
     const dest = ply.played.slice(2, 4)
     badge = tier !== 'none' ? { square: dest, kind: tier } : undefined
     lastMove = { from: ply.played.slice(0, 2), to: dest }
-    tint = tier !== 'none' ? `${TIER[tier].color}66` : undefined
+    tint = tier !== 'none' ? tierTint(tier) : undefined
     // Stockfish's recommendation on every ply where something better existed
     // (not just the bad tiers) — book moves excepted, and no arrow when the
     // played move already was the best one.
@@ -647,7 +658,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     setBranch(null)
     pendingJudgeRef.current = null
     setBranchBadge(null)
-    setSelected((s) => stepTo(s, dir, total, filter, keyPlies))
+    setSelected((s) => stepTo(s, dir, total))
   }
 
   // Click-driven selection (move list, eval graph, summary chip): exits any
@@ -683,6 +694,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // single active branch. Shared by the board click handler and
   // EngineLines' onPlayMove (clicking a live line plays its first move).
   function playUserMove(uci: string) {
+    if (!record) return
     setBoardSel(null)
     setLiveUpdate(null)
     // FIX 2: the only trustworthy "before" eval is one the engine actually
@@ -736,12 +748,11 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     setBranch((b) => (b && b.moves.length > 1 ? { base: b.base, moves: b.moves.slice(0, -1) } : null))
   }
 
-  // End-of-review closure: once every ply has been stepped through, name the
-  // outcome and offer the next action instead of just stopping (peak-end).
-  const outcome =
-    selected !== null && selected === total && total > 0
-      ? outcomeLine(terminal, game.result, game.white.name, game.black.name, total % 2 === 1 ? 'white' : 'black')
-      : null
+  // The game's one-line verdict — used both as the end-of-review closure
+  // (once every ply has been stepped through, peak-end) and, unconditionally
+  // (E2), as the top-of-SummaryCard verdict before stepping starts.
+  const verdict = total > 0 ? outcomeLine(terminal, game.result, game.white.name, game.black.name, total % 2 === 1 ? 'white' : 'black') : null
+  const outcome = selected !== null && selected === total && total > 0 ? verdict : null
 
   // Branch-mode SAN: the branch's own moves, for the BranchCard headline,
   // the MoveList variation row, and the EngineLines panel's PV prefix.
@@ -750,7 +761,9 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
 
   return (
     <main className="dash report">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+      {/* E4: .dash-head instead of a bespoke inline flex — same layout every
+          other dashboard-style page header already uses. */}
+      <header className="dash-head">
         <h1 className="display" style={{ fontSize: '1.5rem', margin: 0 }}>
           {game.white.name} vs {game.black.name}
         </h1>
@@ -789,6 +802,27 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
             </div>
           </div>
           <p className="player-row mono quiet">{bottom.name}{bottom.rating != null ? ` (${bottom.rating})` : ''}</p>
+
+          {/* Live engine lines live under the board: depth + top-3 PVs. The
+              retry placeholder keeps the slot height so nothing jumps. */}
+          {retryGuessing ? (
+            <div className="engine-lines" />
+          ) : (
+            <EngineLines
+              status={engineStatus}
+              update={liveUpdate}
+              prefixUci={
+                branch
+                  ? [...branchPrefix, ...branch.moves]
+                  : showBestLine && ply && selected !== null
+                    ? // Preview/retry-success shows the position after ply.best,
+                      // not the played move — the PV prefix must match it.
+                      [...record.uciMoves.slice(0, selected - 1), ply.best]
+                    : record.uciMoves.slice(0, selected ?? 0)
+              }
+              onPlayMove={playUserMove}
+            />
+          )}
         </div>
 
         <div className="review-panel">
@@ -802,9 +836,8 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
               blackAcc={accuracies.black}
               phaseAcc={phaseAcc}
               enriched={enriched}
-              turning={turning}
-              turningSan={turning !== null ? (sans[turning - 1] ?? null) : null}
-              onSelectTurning={select}
+              verdict={verdict}
+              onSelect={select}
             />
           ) : retry ? (
             <RetryCard outcome={retry.outcome} onShowBest={() => { setPreview(true); setRetry(null) }} />
@@ -824,25 +857,6 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
             />
           )}
 
-          {retryGuessing ? (
-            <div className="engine-lines" />
-          ) : (
-            <EngineLines
-              status={engineStatus}
-              update={liveUpdate}
-              prefixUci={
-                branch
-                  ? [...branchPrefix, ...branch.moves]
-                  : showBestLine && ply && selected !== null
-                    ? // Preview/retry-success shows the position after ply.best,
-                      // not the played move — the PV prefix must match it.
-                      [...record.uciMoves.slice(0, selected - 1), ply.best]
-                    : record.uciMoves.slice(0, selected ?? 0)
-              }
-              onPlayMove={playUserMove}
-            />
-          )}
-
           <div className="button-row">
             {branch && (
               <button className="chip-button" onClick={undoBranch}>
@@ -859,22 +873,14 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
                 {copy.coach.tryAgain}
               </button>
             )}
-            <button
-              className="next-button"
-              onClick={() => (branch ? setBranch(null) : retry ? setRetry(null) : preview ? setPreview(false) : step(1))}
-              disabled={!preview && !retry && !branch && (total === 0 || selected === total)}
-            >
-              {preview || retry || branch ? copy.coach.resume : copy.coach.next}
-            </button>
-          </div>
-
-          <div className="button-row">
-            <button className="chip-button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-              {copy.coach.filterAll}
-            </button>
-            <button className="chip-button" aria-pressed={filter === 'key'} onClick={() => setFilter('key')}>
-              {copy.coach.filterKey}
-            </button>
+            {(preview || retry || branch) && (
+              <button
+                className="chip-button"
+                onClick={() => (branch ? setBranch(null) : retry ? setRetry(null) : setPreview(false))}
+              >
+                {copy.coach.resume}
+              </button>
+            )}
           </div>
 
           <div className="review-graph">
@@ -896,7 +902,6 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
             previewPly={preview ? selected : null}
             bestSan={preview ? (coach?.bestSan ?? null) : null}
             onSelect={select}
-            filter={filter}
             exploreLine={branch ? { afterPly: branch.base, sans: branchSans } : null}
           />
 
@@ -914,7 +919,9 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
               {copy.coach.navLast}
             </button>
           </div>
-          <p className="quiet keyboard-hint">{copy.coach.keysHint}</p>
+          <p className="quiet keyboard-hint">
+            <kbd>←</kbd> <kbd>→</kbd> {copy.coach.keysHint}
+          </p>
         </div>
       </div>
     </main>

@@ -6,6 +6,10 @@ import type { WrappedSummary } from './api'
 // sizes: the 4:5 feed card that is also the OG/Twitter unfurl image, and the
 // 9:16 story export for Instagram and TikTok. One renderer so the sizes can
 // never drift apart.
+// A3: colors intentionally frozen pre-redesign — satori renders these
+// server-side with no access to globals.css custom properties, and a shared
+// card's colors must stay byte-stable across a redesign so an already-posted
+// image never silently changes. Do not retheme; literal hex only.
 const VOID = '#0B0C10'
 const BONE = '#E8E4D9'
 const MUTED = '#8A8D94'

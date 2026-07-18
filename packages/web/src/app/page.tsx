@@ -1,11 +1,18 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { normalizeUsername } from '@forked/shared'
 import { copy } from '../copy'
 import { getPositionsJudged, postIngest } from '../lib/api'
+import { ClickSpark } from '../components/bits/ClickSpark'
+import { ShinyText } from '../components/bits/ShinyText'
+import { CountUp } from '../components/bits/CountUp'
+import { DotGrid } from '../components/bits/DotGrid'
+import { SplitText } from '../components/bits/SplitText'
+import { Magnet } from '../components/bits/Magnet'
+import { FadeContent } from '../components/bits/FadeContent'
 
 export default function Landing() {
   const router = useRouter()
@@ -55,9 +62,15 @@ export default function Landing() {
 
   return (
     <main className="flow">
-      <h1 className="display headline">
-        Do you know why you lose<span className="qq">??</span>
-      </h1>
+      <DotGrid />
+      {/* D2: ClickSpark wraps only the hero heading now — it used to wrap the
+          whole page, so any click anywhere sparked. */}
+      <ClickSpark>
+        <h1 className="display headline">
+          <SplitText text="Do you know why you lose" />
+          <span className="qq">??</span>
+        </h1>
+      </ClickSpark>
       <p className="sub">{copy.sub}</p>
 
       <form onSubmit={submit}>
@@ -71,17 +84,20 @@ export default function Landing() {
           autoCorrect="off"
           spellCheck={false}
         />
-        <button className="cta" type="submit">
-          {copy.cta}
-        </button>
+        <Magnet>
+          <button className="cta" type="submit">
+            <ShinyText text={copy.cta} />
+          </button>
+        </Magnet>
         {error && (
           <p className="inline-error" role="alert">
             {error}
           </p>
         )}
+        {/* D3: plain quiet links — one accent object in the hero (the CTA). */}
         <Link href="/u/erik" className="link-button">
           {copy.demoLink}
-        </Link>
+        </Link>{' '}
         <button
           type="button"
           className="link-button"
@@ -94,6 +110,7 @@ export default function Landing() {
       <p className="quiet">{copy.privacyLine}</p>
 
       {expanded && (
+        <FadeContent blur duration={250}>
         <form onSubmit={submitWrapped} className="expand-row">
           <textarea
             className="field"
@@ -127,6 +144,7 @@ export default function Landing() {
             {busy ? copy.ctaBusy : copy.wrappedCta}
           </button>
         </form>
+        </FadeContent>
       )}
 
       <Ticker />
@@ -141,46 +159,36 @@ export default function Landing() {
 }
 
 // The global ticker: live positions-judged count from the metrics item.
-// Counts up ease-out over ~800ms on first reveal only; later updates snap,
-// and tabular-nums means a changing number never shifts layout.
+// CountUp itself handles the ease-out-once/snap-after behavior; this just
+// keeps polling and hands it the latest value.
 function Ticker() {
-  const [shown, setShown] = useState<number | null>(null)
-  const target = useRef<number | null>(null)
+  const [n, setN] = useState<number | null>(null)
 
   useEffect(() => {
     let stop = false
-    let raf = 0
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
     async function poll() {
-      const n = await getPositionsJudged()
-      if (stop || n === null) return
-      if (target.current === null && !reduced && n > 0) {
-        const t0 = performance.now()
-        const animate = (t: number) => {
-          const k = Math.min(1, (t - t0) / 800)
-          setShown(Math.round(n * (1 - Math.pow(1 - k, 3))))
-          if (k < 1 && !stop) raf = requestAnimationFrame(animate)
-        }
-        raf = requestAnimationFrame(animate)
-      } else {
-        setShown(n)
-      }
-      target.current = n
+      // K10: skip the fetch entirely while the tab isn't visible.
+      if (document.hidden) return
+      const v = await getPositionsJudged()
+      if (!stop && v !== null) setN(v)
     }
-
     void poll()
     const iv = setInterval(poll, 5000)
     return () => {
       stop = true
       clearInterval(iv)
-      cancelAnimationFrame(raf)
     }
   }, [])
 
   return (
     <p className="mono ticker">
-      {shown === null ? ' ' : copy.ticker(shown.toLocaleString('en-US'))}
+      {n === null ? (
+        ' '
+      ) : (
+        <>
+          <CountUp to={n} duration={0.8} /> {copy.tickerSuffix}
+        </>
+      )}
     </p>
   )
 }

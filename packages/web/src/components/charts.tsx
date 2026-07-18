@@ -11,6 +11,8 @@ const BONE = 'var(--bone)'
 const LINE = 'var(--line)'
 const MUTED = 'var(--muted)'
 const BLUNDER = 'var(--blunder)'
+// B2: red is reserved for the single worst bar; every other bar is bone.
+const BAR = 'color-mix(in srgb, var(--bone) 80%, transparent)'
 
 export function LineChart({
   data,
@@ -72,6 +74,8 @@ export function BarChart({
   const ih = height - m.top - m.bottom
   if (data.length === 0) return <Empty />
   const max = Math.max(1, ...data.map((d) => d.value))
+  // B2: only the worst bar keeps the red accent; the rest read as bone.
+  const worst = data.reduce((w, d) => (d.value > w.value ? d : w), data[0])
   const x = scaleBand().domain(data.map((d) => d.label)).range([0, iw]).padding(0.3)
   const y = scaleLinear().domain([0, max]).range([ih, 0])
 
@@ -84,7 +88,7 @@ export function BarChart({
           const bh = ih - y(d.value)
           return (
             <g key={d.label}>
-              <rect x={bx} y={y(d.value)} width={x.bandwidth()} height={bh} fill={BLUNDER} rx={2} />
+              <rect x={bx} y={y(d.value)} width={x.bandwidth()} height={bh} fill={d === worst ? BLUNDER : BAR} rx={2} />
               <text x={bx + x.bandwidth() / 2} y={y(d.value) - 6} textAnchor="middle" fill={MUTED} fontSize={11}>
                 {d.value.toFixed(unit === '%' ? 1 : 0)}
                 {unit}

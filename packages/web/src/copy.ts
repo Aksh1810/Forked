@@ -32,6 +32,13 @@ export function formatMonth(m: string): string {
   return name ? `${name} ${yyyy}` : m
 }
 
+// Phase display labels, shared by the report summary and the breakdown KPIs.
+export const phaseLabels: Record<'opening' | 'middlegame' | 'endgame', string> = {
+  opening: 'Opening',
+  middlegame: 'Middlegame',
+  endgame: 'Endgame',
+}
+
 export const copy = {
   sub: "Every game you've played on chess.com, listed instantly. Pick one and Stockfish explains it, move by move, in about ten seconds. Free.",
   inputPlaceholder: 'chess.com username',
@@ -40,7 +47,7 @@ export const copy = {
   wrappedToggle: 'Or get the whole-history Wrapped story instead',
   wrappedCta: 'Analyze my games',
   pgnPlaceholder: 'Paste PGN here',
-  ticker: (n: string) => `${n} positions judged`,
+  tickerSuffix: 'positions judged',
   leaderboard: 'Leaderboard',
   yourLink: 'This page is your link. Come back anytime.',
   browseHint: 'Enter your chess.com username first.',
@@ -70,6 +77,20 @@ export const copy = {
     // Quiet ETA line (C2/item 3) while a job is analyzing.
     etaMinutes: (n: number) => `about ${n} min left`,
     etaUnderMinute: 'under a minute left',
+    // J3: visually-hidden live-region text announcing progress to screen
+    // readers (the eval bar's fill is the only sighted signal otherwise).
+    srAnnounce: (completed: number, total: number) => `${completed} of ${total} games`,
+  },
+
+  // K7: breakdown/leaderboard load failures distinct from true not-found —
+  // the API collapses network errors and 404s into the same null today, so
+  // this is shown after a retry still comes back empty.
+  outage: {
+    breakdown: "Couldn't load this analysis — refresh to retry.",
+    leaderboard: 'Leaderboard is unavailable right now.',
+    // K6: the per-game poll gives up after repeated network failures,
+    // distinct from the "no analysis exists" / notFound copy.
+    gamePoll: "Couldn't reach the server — refresh to retry.",
   },
 
   // The browse list: pull all your games, analyze one at a time.
@@ -146,9 +167,11 @@ export const copy = {
     navPrev: '◀',
     navNext: '▶',
     navLast: '▶|',
-    accuracy: 'Accuracy',
-    // The turning-point headline on the pre-review summary card.
-    turnedOn: (move: string, san: string) => `The game turned on move ${move} — ${san}.`,
+    // E1: the qualified line under each player's big accuracy % headline.
+    estEloLine: (elo: number) => `est. ~${elo} Elo`,
+    // E2: verdict chip-button on the summary card, jumping to the first
+    // mistake/miss/blunder ply. Hidden entirely when n === 0.
+    stepBlunders: (n: number) => `Step through your ${n} ${n === 1 ? 'blunder' : 'blunders'} →`,
     // End-of-review closure line, plus the link onward.
     outcomeCheckmate: (winner: string) => `Checkmate — ${winner} wins.`,
     outcomeStalemate: 'Stalemate — a draw.',
@@ -172,13 +195,9 @@ export const copy = {
     engineLinesTerminal: 'No moves — the game is over.',
     engineDepth: (d: number) => `depth ${d}`,
     // Key-moves filter toggle above the move list.
-    filterAll: 'All moves',
-    filterKey: 'Key moves',
-    keysHint: '← → step through moves',
+    // E3: the arrows render as <kbd> elements now — this is just the tail text.
+    keysHint: 'step through moves',
     // Phase-accuracy row labels on the summary card.
-    phaseOpening: 'Opening',
-    phaseMiddlegame: 'Middlegame',
-    phaseEndgame: 'Endgame',
     // Coach motif sentences (shared/classify.ts moveMotif kinds).
     allowsMate: (n: number) => `This allows mate in ${n}.`,
     missedMate: (n: number) => `You had a forced mate in ${n}.`,
@@ -210,6 +229,19 @@ export const copy = {
     removeBusy: 'Removing...',
     removeDone: 'Removed. Your entry will not appear again.',
     back: 'Back',
+    // H1: podium ghost card for an unfilled top-3 spot.
+    podiumGhost: (rank: number) => `#${rank} — this spot is open`,
+    podiumGhostCta: 'Analyze your games',
+  },
+
+  // F1/F2: breakdown dashboard KPI strip and chart-gating empty states.
+  breakdown: {
+    kpiAccuracy: 'Accuracy avg',
+    kpiBlunders: 'Blunders total',
+    kpiGames: 'Games analyzed',
+    kpiWorstPhase: 'Worst phase',
+    // Shown in a chart Panel whenever its series has fewer than 3 points.
+    emptyChart: (n: number) => `Analyze ${n}+ games to unlock this trend.`,
   },
 
   // Rotating status pool, one line every 4 seconds.

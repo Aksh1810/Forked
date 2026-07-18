@@ -68,6 +68,11 @@ const err = (status: number, code: IngestErrorCode, message: string): IngestResp
 const USERNAME_RE = /^[a-zA-Z0-9_-]{1,50}$/
 const MONTH_RE = /^\d{4}-\d{2}$/
 
+// Paste-path ceiling checked BEFORE parsing: maxGamesPerJob only counts games
+// after the whole text is parsed, so without this a single multi-megabyte POST
+// buys an unbounded chessops parse. ~2MB comfortably covers 500 real games.
+const MAX_PGN_CHARS = 2_000_000
+
 // The initial lock lease only needs to cover the archive fetch; once the job
 // exists the lease is extended to the job's deadline, so an active job keeps
 // its lock and an ingest killed mid-fetch leaves a lock the janitor sweep
@@ -96,9 +101,17 @@ export async function ingest(
   if (single && (!username || !req.month)) {
     return err(400, 'bad-request', 'Analyzing one game needs a username and its month.')
   }
+  if (req.pgn && req.pgn.length > MAX_PGN_CHARS) {
+    return err(422, 'archive-too-large', 'That PGN paste is too large. Split it into smaller batches.')
+  }
 
   try {
     await bumpRate(deps, username ?? 'pgn-paste', req.ip, cfg.ratePerDay)
+    // Second, coarser limiter on the IP alone: the per-(username, ip) counter
+    // above resets with every new username, so rotating usernames would
+    // otherwise buy unlimited jobs from one address. '@ip' cannot collide
+    // with a real username ('@' fails USERNAME_RE).
+    await bumpRate(deps, '@ip', req.ip, cfg.ratePerDay * 10)
   } catch (e) {
     if (e instanceof ConditionalCheckFailedException) {
       return err(429, 'rate-limited', 'Daily analysis limit reached for this account. Try again tomorrow.')

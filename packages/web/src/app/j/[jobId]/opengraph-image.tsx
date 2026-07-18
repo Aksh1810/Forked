@@ -15,6 +15,7 @@ export default async function Image({ params }: { params: Promise<{ jobId: strin
   if (!job?.wrapped) {
     // A job still analyzing (or missing) gets a plain branded fallback rather
     // than a broken image; a finished job always unfurls its real card.
+    // A3: colors intentionally frozen pre-redesign — see card-image.tsx.
     return new ImageResponse(
       (
         <div

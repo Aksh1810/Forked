@@ -80,7 +80,7 @@ export function EvalGraph({
     <svg width="100%" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="game evaluation graph">
       <g transform={`translate(${m.left},${m.top})`}>
         <rect x={0} y={0} width={iw} height={ih} fill="#000" rx={4} />
-        {/* #5a5a5a, not --line (#262a33): the midline sits on the #000 graph
+        {/* #5a5a5a, not --line (#2c2933): the midline sits on the #000 graph
             panel, not the page void, where --line falls under 3:1. */}
         <line x1={0} x2={iw} y1={y(50)} y2={y(50)} stroke="#5a5a5a" strokeWidth={1} />
         {areaPath && <path d={areaPath} fill="var(--bone)" />}
@@ -157,10 +157,17 @@ function HalfMove({
   // stay the default text color so the list doesn't turn into a rainbow.
   const tinted = tier === 'brilliant' || tier === 'great' || tier === 'inaccuracy' || tier === 'mistake' || tier === 'miss' || tier === 'blunder'
   return (
-    <button className={`move-cell${selected ? ' move-selected' : ''}`} onClick={() => onSelect(ply)}>
+    // J2: the tier word is appended to the accessible name — sighted users
+    // get it from the TierIcon's color/glyph, a screen reader gets nothing
+    // from those without this.
+    <button
+      className={`move-cell${selected ? ' move-selected' : ''}`}
+      onClick={() => onSelect(ply)}
+      aria-label={tier !== 'none' ? `${san} ${TIER[tier].word}` : san}
+    >
       {tier !== 'none' && <TierIcon kind={tier} size={14} />}
       {glyph && (
-        <span style={{ display: 'inline-block', width: '1em', height: '1em', verticalAlign: 'middle' }}>
+        <span className={`move-glyph${mover === 'black' ? ' move-glyph-black' : ''}`}>
           <Piece piece={glyph} />
         </span>
       )}
@@ -182,7 +189,6 @@ export function MoveList({
   previewPly,
   bestSan,
   onSelect,
-  filter,
   exploreLine,
 }: {
   record: EngineRecord
@@ -192,10 +198,6 @@ export function MoveList({
   previewPly: number | null
   bestSan: string | null
   onSelect: (ply: number) => void
-  // 'key' keeps only pairs where either half landed a notable tier (the same
-  // set the eval graph dots use) — the fastest path to "show me what went
-  // wrong". Filters whole pairs, not halves, so numbering stays intact.
-  filter: 'all' | 'key'
   // Live explore mode (Wave 2): the branch line played from `afterPly`
   // onward, rendered as a .move-variation row right after that ply's pair
   // (or before move 1 when afterPly is 0, i.e. branching from the start
@@ -206,19 +208,9 @@ export function MoveList({
     document.querySelector('.move-selected')?.scrollIntoView({ block: 'nearest' })
   }, [selected])
 
-  let rows: { num: number; white: PlyAnalysis; black?: PlyAnalysis }[] = []
+  const rows: { num: number; white: PlyAnalysis; black?: PlyAnalysis }[] = []
   for (let i = 0; i < record.plies.length; i += 2) {
     rows.push({ num: i / 2 + 1, white: record.plies[i], black: record.plies[i + 1] })
-  }
-  if (filter === 'key') {
-    rows = rows.filter((row) => {
-      // Always keep the pair an explore branch anchors to — otherwise the
-      // variation row below it has nowhere to render.
-      if (exploreLine && (exploreLine.afterPly === row.white.ply || exploreLine.afterPly === row.black?.ply)) return true
-      const wt = enriched[row.white.ply - 1]
-      const bt = row.black && enriched[row.black.ply - 1]
-      return (wt && KEY_TIERS.has(wt)) || (bt && KEY_TIERS.has(bt))
-    })
   }
 
   return (

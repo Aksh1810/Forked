@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { BRAND_NAME } from '@forked/shared'
 import { copy, formatDate, formatMonth } from '../../../copy'
 import { getJob, getUserGames, postIngest, type GameRow } from '../../../lib/api'
+import { GooeyNav } from '../../../components/bits/GooeyNav'
+import { ShinyText } from '../../../components/bits/ShinyText'
 
 type Row = GameRow & { month: string }
 type ResultFilter = 'all' | 'w' | 'l'
@@ -182,136 +184,143 @@ export default function Games({ params }: { params: Promise<{ username: string }
       {months !== null && months.length > 0 && (
         <>
           {rows.length > 0 && (
-            <div className="button-row" role="group" style={{ marginBottom: 12 }}>
-              <button className="chip-button" aria-pressed={resultFilter === 'all'} onClick={() => setResultFilter('all')}>
-                {copy.browse.filterAll}
-              </button>
-              <button className="chip-button" aria-pressed={resultFilter === 'w'} onClick={() => setResultFilter('w')}>
-                {copy.browse.won}
-              </button>
-              <button className="chip-button" aria-pressed={resultFilter === 'l'} onClick={() => setResultFilter('l')}>
-                {copy.browse.lost}
-              </button>
+            <div style={{ marginBottom: 12 }}>
+              <GooeyNav
+                items={[
+                  { label: copy.browse.filterAll, value: 'all' as const },
+                  { label: copy.browse.won, value: 'w' as const },
+                  { label: copy.browse.lost, value: 'l' as const },
+                ]}
+                active={resultFilter}
+                onSelect={setResultFilter}
+                ariaLabel="filter by result"
+              />
             </div>
           )}
 
           {filteredRows.length > 0 && (
-            <div className="table-scroll games-table-scroll">
-              <table className="game-table">
-                <thead>
-                  <tr>
-                    <th>{copy.browse.colDate}</th>
-                    <th>{copy.browse.colOpponent}</th>
-                    <th></th>
-                    <th>{copy.browse.colOpening}</th>
-                    <th className="num-col">{copy.browse.colLength}</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {withMonthHeaders.map(({ g, monthHeader }) => {
-                    const res = resultLetter(g)
-                    const rating = opponentRating(g)
-                    return (
-                      <Fragment key={g.id}>
-                        {monthHeader && (
-                          <tr>
-                            <td colSpan={6} className="month-divider">
-                              {formatMonth(monthHeader)}
+            // C4: no FadeContent wrapper — key={resultFilter} on the
+            // table-scroll/game-cards containers directly remounts them (and
+            // re-runs their row-stagger animation) on every filter change,
+            // which is all the "entrance" this needs.
+            <>
+              <div className="table-scroll games-table-scroll" key={`table-${resultFilter}`}>
+                <table className="game-table">
+                  <thead>
+                    <tr>
+                      <th>{copy.browse.colDate}</th>
+                      <th>{copy.browse.colOpponent}</th>
+                      <th></th>
+                      <th>{copy.browse.colOpening}</th>
+                      <th className="num-col">{copy.browse.colLength}</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {withMonthHeaders.map(({ g, monthHeader }) => {
+                      const res = resultLetter(g)
+                      const rating = opponentRating(g)
+                      return (
+                        <Fragment key={g.id}>
+                          {monthHeader && (
+                            <tr>
+                              <td colSpan={6} className="month-divider">
+                                {formatMonth(monthHeader)}
+                              </td>
+                            </tr>
+                          )}
+                          <tr
+                            className={g.rejected ? undefined : `row-click${busyId === g.id ? ' coach-flash' : ''}`}
+                            onClick={g.rejected ? undefined : () => analyze(g)}
+                          >
+                            <td className="mono quiet">{formatDate(g.date)}</td>
+                            <td>
+                              {opponent(g)}
+                              {rating != null && <span className="quiet"> ({rating})</span>}
+                            </td>
+                            <td>
+                              <ResChip r={res} /> <ColorDot color={g.userColor} />
+                            </td>
+                            <td className="quiet">{g.opening ?? '?'}</td>
+                            <td className="mono quiet num-col">{Math.ceil(g.plies / 2)}</td>
+                            <td>
+                              {g.rejected ? (
+                                <span className="quiet" title={g.rejected}>
+                                  {'—'}
+                                </span>
+                              ) : (
+                                <button
+                                  className="row-analyze"
+                                  disabled={busyId !== null}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void analyze(g)
+                                  }}
+                                >
+                                  <AnalyzeLabel busy={busyId === g.id} />
+                                </button>
+                              )}
                             </td>
                           </tr>
-                        )}
-                        <tr
-                          className={g.rejected ? undefined : 'row-click'}
-                          onClick={g.rejected ? undefined : () => analyze(g)}
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <ul className="game-cards" key={`cards-${resultFilter}`}>
+                {withMonthHeaders.map(({ g, monthHeader }) => {
+                  const res = resultLetter(g)
+                  const rating = opponentRating(g)
+                  const busy = busyId === g.id
+                  return (
+                    <Fragment key={g.id}>
+                      {/* J8: a screen reader should hear the month it's
+                          moving into — it was wrongly hidden before. */}
+                      {monthHeader && (
+                        <li className="month-divider-li">
+                          {formatMonth(monthHeader)}
+                        </li>
+                      )}
+                      <li>
+                        <button
+                          className="game-card"
+                          disabled={g.rejected != null || busyId !== null}
+                          onClick={() => analyze(g)}
                         >
-                          <td className="mono quiet">{formatDate(g.date)}</td>
-                          <td>
-                            {opponent(g)}
-                            {rating != null && <span className="quiet"> ({rating})</span>}
-                          </td>
-                          <td>
-                            <ResChip r={res} /> <ColorDot color={g.userColor} />
-                          </td>
-                          <td className="quiet">{g.opening ?? '?'}</td>
-                          <td className="mono quiet num-col">{Math.ceil(g.plies / 2)}</td>
-                          <td>
+                          <span className="game-card-row1">
+                            <span>
+                              {opponent(g)}
+                              {rating != null && <span className="quiet"> ({rating})</span>}
+                            </span>
                             {g.rejected ? (
                               <span className="quiet" title={g.rejected}>
                                 {'—'}
                               </span>
+                            ) : busy ? (
+                              <span className="quiet">
+                                <AnalyzeLabel busy />
+                              </span>
                             ) : (
-                              <button
-                                className="row-analyze"
-                                disabled={busyId !== null}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  void analyze(g)
-                                }}
-                              >
-                                <AnalyzeLabel busy={busyId === g.id} />
-                              </button>
+                              <ResChip r={res} />
                             )}
-                          </td>
-                        </tr>
-                      </Fragment>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {filteredRows.length > 0 && (
-            <ul className="game-cards">
-              {withMonthHeaders.map(({ g, monthHeader }) => {
-                const res = resultLetter(g)
-                const rating = opponentRating(g)
-                const busy = busyId === g.id
-                return (
-                  <Fragment key={g.id}>
-                    {monthHeader && (
-                      <li className="month-divider-li" aria-hidden>
-                        {formatMonth(monthHeader)}
-                      </li>
-                    )}
-                    <li>
-                      <button
-                        className="game-card"
-                        disabled={g.rejected != null || busyId !== null}
-                        onClick={() => analyze(g)}
-                      >
-                        <span className="game-card-row1">
-                          <span>
-                            {opponent(g)}
-                            {rating != null && <span className="quiet"> ({rating})</span>}
                           </span>
-                          {g.rejected ? (
-                            <span className="quiet" title={g.rejected}>
-                              {'—'}
-                            </span>
-                          ) : busy ? (
-                            <span className="quiet">
-                              <AnalyzeLabel busy />
-                            </span>
-                          ) : (
-                            <ResChip r={res} />
-                          )}
-                        </span>
-                        <span className="game-card-row2 quiet">
-                          <ColorDot color={g.userColor} />
-                          <span>{formatDate(g.date)}</span>
-                          <span>·</span>
-                          <span className="game-card-opening">{g.opening ?? '?'}</span>
-                          <span>·</span>
-                          <span>{Math.ceil(g.plies / 2)} moves</span>
-                        </span>
-                      </button>
-                    </li>
-                  </Fragment>
-                )
-              })}
-            </ul>
+                          <span className="game-card-row2 quiet">
+                            <ColorDot color={g.userColor} />
+                            <span>{formatDate(g.date)}</span>
+                            <span>·</span>
+                            <span className="game-card-opening">{g.opening ?? '?'}</span>
+                            <span>·</span>
+                            <span>{Math.ceil(g.plies / 2)} moves</span>
+                          </span>
+                        </button>
+                      </li>
+                    </Fragment>
+                  )
+                })}
+              </ul>
+            </>
           )}
 
           <div ref={sentinelRef}>
@@ -374,7 +383,7 @@ function AnalyzeLabel({ busy }: { busy: boolean }) {
       <span className="spin" aria-hidden>
         ◐
       </span>{' '}
-      {copy.browse.analyzing}
+      <ShinyText text={copy.browse.analyzing} speed={1.5} />
     </>
   )
 }

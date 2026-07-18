@@ -20,9 +20,13 @@ FROM node:20-bookworm-slim
 # binary itself reports via "id name" into every engine record.
 ARG SF_VERSION=sf_18
 ARG SF_ASSET=stockfish-ubuntu-x86-64-avx2
+# Release-asset digest, verified before unpacking: a compromised or replaced
+# GitHub asset fails the build instead of shipping an arbitrary engine binary.
+ARG SF_SHA256=536c0c2c0cf06450df0bfb5e876ef0d3119950703a8f143627f990c7b5417964
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl \
   && curl -fsSL -o /tmp/sf.tar "https://github.com/official-stockfish/Stockfish/releases/download/${SF_VERSION}/${SF_ASSET}.tar" \
+  && echo "${SF_SHA256}  /tmp/sf.tar" | sha256sum -c - \
   && tar -xf /tmp/sf.tar -C /tmp \
   && mv "/tmp/stockfish/${SF_ASSET}" /usr/local/bin/stockfish \
   && chmod +x /usr/local/bin/stockfish \
