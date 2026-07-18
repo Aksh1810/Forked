@@ -27,7 +27,7 @@ import { EngineLines } from '../../../../../components/EngineLines'
 import { copy, formatDate, phaseLabels } from '../../../../../copy'
 import { getGameReport, getJob, type GameReport } from '../../../../../lib/api'
 import { LiveEngine, type EngineUpdate } from '../../../../../lib/engine'
-import { clickMove, destsFor } from '../../../../../lib/moves'
+import { clickMove, destsFor, terminalEval } from '../../../../../lib/moves'
 
 // Rows always shown in the summary table even at zero, matching chess.com's
 // convention of always naming the headline tiers.
@@ -494,11 +494,20 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // read compared against the parent's deeper-settled "before" eval.
   useEffect(() => {
     const pending = pendingJudgeRef.current
-    // FIX 3: a terminal (mate/stalemate) update has no lines[0] — nothing to
-    // judge against, and liveUpdate.lines[0].eval below would throw.
-    if (!pending || !branch || !liveUpdate || !liveUpdate.lines[0] || liveUpdate.depth < 12) return
+    if (!pending || !branch) return
     const last = branch.moves[branch.moves.length - 1]
     if (last !== pending.uci) return // stale pending from a move that's since been undone/replaced
+    // FIX 1c: a terminal update has no lines[0] to judge against — classifyLive
+    // below would never run for the branch move that ends the game. Checkmate
+    // badges the mating move 'best' directly; stalemate gets no badge.
+    if (liveUpdate?.terminal) {
+      const tEval = branchFen ? terminalEval(branchFen) : null
+      setBranchBadge(tEval?.type === 'mate' ? { square: pending.uci.slice(2, 4), kind: 'best' } : null)
+      return
+    }
+    // FIX 3: a non-terminal update with no lines[0] yet (still ramping up) —
+    // nothing to judge against.
+    if (!liveUpdate || !liveUpdate.lines[0] || liveUpdate.depth < 12) return
     const mover = (branch.base + branch.moves.length) % 2 === 1 ? 'white' : 'black'
     const kind = classifyLive(pending.before, liveUpdate.lines[0].eval, mover, pending.uci === pending.bestUci)
     setBranchBadge(kind !== 'none' ? { square: pending.uci.slice(2, 4), kind } : null)
@@ -586,6 +595,17 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // from shownFen, which already mirrors this same if-chain.
   const fen: string = retryGuessing ? fenBeforePly(record.uciMoves, selected ?? 0) : shownFen!
 
+  // FIX 1b: the branch position one ply back — the parent of the LAST branch
+  // move — used below to find a still-valid live eval while the new
+  // position's own search hasn't produced one yet. Same fenBeforePly(array,
+  // array.length + 1) pattern as branchFen above, just one move shorter.
+  const branchParentFen = branch
+    ? fenBeforePly(
+        [...record.uciMoves.slice(0, branch.base), ...branch.moves.slice(0, -1)],
+        branch.base + branch.moves.length,
+      )
+    : null
+
   // The eval shown on the bar: the live engine's read of the shown position,
   // once it has one. Otherwise (no live update yet, engine failed, or
   // retry-guessing) the latest non-null stored eval at or before the
@@ -598,6 +618,19 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // eval instead of crashing on liveUpdate.lines[0].eval.
   if (!retryGuessing && liveUpdate?.lines[0]) {
     shownEval = liveUpdate.lines[0].eval
+  } else if (!retryGuessing && branch && liveUpdate?.terminal) {
+    // FIX 1a: the mainline stored-eval fallback below is for `selected`'s
+    // position (the branch BASE) — showing it here would put a stale eval on
+    // the bar permanently, contradicting a mated/stalemated branch position.
+    // `fen` already equals the branch's own position (shownFen resolves to
+    // branchFen while a branch is active), so read the eval off it directly.
+    shownEval = terminalEval(fen) ?? { type: 'cp', value: 0 }
+  } else if (!retryGuessing && branch && !liveUpdate && lastLiveRef.current?.fen === branchParentFen) {
+    // FIX 1b: the engine hasn't produced an update for the new branch
+    // position yet — hold the last real eval it produced for the position
+    // one branch-move back, instead of snapping to the mainline base's
+    // stored eval (a different position N branch-moves shallower).
+    shownEval = lastLiveRef.current.eval
   } else {
     shownEval = record.startEval
     if (selected !== null) {

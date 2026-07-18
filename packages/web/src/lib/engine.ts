@@ -21,6 +21,12 @@ export interface EngineUpdate {
 
 const THROTTLE_MS = 125
 const MIN_DEPTH = 10
+// ponytail: 12s ceiling (movetime 8000 + margin for the stop/isready
+// round-trip) — a worker that silently drops a search (killed mid-flight, no
+// error event) would otherwise leave `searching` true forever, since nothing
+// else clears it without a bestmove. Raise if real-world hardware needs more
+// slack.
+const WATCHDOG_MS = 12_000
 
 // Parses one `info ...` UCI line into a White-perspective update, or null for
 // anything that isn't an exact-score info line (bestmove/currmove/junk, and
@@ -93,6 +99,14 @@ export class LiveEngine {
   private lastEmit = 0
   private pending: EngineUpdate | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
+  // FIX 3: armed on every real `go`, cleared on bestmove/stop/dispose. If it
+  // fires, that search's bestmove is presumed lost.
+  private watchdog: ReturnType<typeof setTimeout> | null = null
+  // FIX 3: set by the post-handshake worker `error` listener. Once true,
+  // analyze()/startSearch() no-op instead of posting into a worker that will
+  // never reply — the page's existing 'failed' status (set only from the
+  // start() handshake) already covers the UI for a dead engine.
+  private dead = false
   // The three MultiPV slots for the current search; rebuilt from scratch on
   // every startSearch() so a new position never shows the old position's
   // lines.
@@ -127,11 +141,26 @@ export class LiveEngine {
       worker.postMessage('uci')
     })
     worker.addEventListener('message', (e: MessageEvent<string>) => this.handleLine(e.data))
+    // FIX 3: the handshake's own error listener is `once` and already
+    // fired-or-removed by now — a worker abort AFTER the handshake (wasm
+    // OOM, the tab's process getting killed) would otherwise go unobserved.
+    worker.addEventListener('error', () => {
+      this.dead = true
+    })
     document.addEventListener('visibilitychange', this.onVisibility)
   }
 
   private startSearch(fen: string) {
-    if (!this.worker) return
+    if (!this.worker || this.dead) return
+    // FIX 2: a hidden tab already gets `stop` posted to its live search (see
+    // onVisibility below), but nothing stopped a QUEUED search — one launched
+    // from the bestmove handler below — from starting fresh in the
+    // background, burning ~8s of wasm CPU nobody can see. targetFen already
+    // holds this fen (analyze() sets it before ever calling startSearch, on
+    // both the direct path and the path that queues one), so bailing here and
+    // leaving `searching` false is enough: onVisibility's show-path calls
+    // analyze(this.targetFen, ...), which re-enters startSearch once visible.
+    if (typeof document !== 'undefined' && document.hidden) return
     this.currentFen = fen
     this.blackToMove = fen.split(' ')[1] === 'b'
     this.lineSlots = []
@@ -141,10 +170,43 @@ export class LiveEngine {
     // ponytail: movetime 8000 ceiling — deep enough for interactive analysis
     // without letting one position hang the worker; raise if users complain.
     this.worker.postMessage('go movetime 8000')
+    this.armWatchdog()
+  }
+
+  private armWatchdog() {
+    if (this.watchdog) clearTimeout(this.watchdog)
+    this.watchdog = setTimeout(() => this.onWatchdog(), WATCHDOG_MS)
+  }
+
+  private clearWatchdog() {
+    if (this.watchdog) clearTimeout(this.watchdog)
+    this.watchdog = null
+  }
+
+  // FIX 3: the search that was live when this timer was armed never reported
+  // a bestmove. Treat it as lost — unwedge `searching` and move on to
+  // whatever's next, same as a real bestmove would have.
+  private onWatchdog() {
+    this.watchdog = null
+    if (!this.searching) return
+    this.searching = false
+    if (this.queuedFen !== null) {
+      const next = this.queuedFen
+      this.startSearch(next)
+    } else if (this.currentFen) {
+      this.startSearch(this.currentFen)
+    }
   }
 
   private handleLine(line: string) {
     if (line.startsWith('bestmove')) {
+      // FIX 4: a stray bestmove while idle (already-handled duplicate, or one
+      // that arrives before any search ever started) must not resurrect
+      // state — `bestmove (none)` here would schedule a terminal update
+      // cached under whatever currentFen is left over from the LAST real
+      // search, poisoning the cache for a non-terminal position.
+      if (!this.searching) return
+      this.clearWatchdog() // FIX 3: this search finished on its own, no rescue needed
       this.searching = false
       if (this.queuedFen !== null) {
         // This bestmove belongs to the search we already abandoned (queuedFen
@@ -205,7 +267,7 @@ export class LiveEngine {
   // Map only, cleared on reload — add IndexedDB if cross-session eval reuse
   // ever matters.
   analyze(fen: string, onUpdate: (u: EngineUpdate) => void): void {
-    if (!this.worker) return
+    if (!this.worker || this.dead) return
     this.onUpdate = onUpdate
     this.targetFen = fen
     // Cancel any in-flight throttle timer left over from whatever was
@@ -244,11 +306,16 @@ export class LiveEngine {
     this.onUpdate = null
     this.targetFen = null
     this.queuedFen = null
+    // FIX 3: nobody's listening for this search's outcome anymore — don't
+    // let the watchdog resurrect it (restart on currentFen) after an
+    // explicit stop.
+    this.clearWatchdog()
   }
 
   dispose(): void {
     document.removeEventListener('visibilitychange', this.onVisibility)
     if (this.timer) clearTimeout(this.timer)
+    this.clearWatchdog()
     this.worker?.terminate()
     this.worker = null
     this.onUpdate = null

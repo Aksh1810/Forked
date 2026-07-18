@@ -1,7 +1,7 @@
 import { Chess, normalizeMove } from 'chessops/chess'
 import { parseFen } from 'chessops/fen'
 import { makeSquare, parseSquare, squareRank } from 'chessops/util'
-import { standardUci } from '@forked/shared'
+import { standardUci, type Eval } from '@forked/shared'
 
 export type ClickResult =
   | { kind: 'select'; from: string }
@@ -45,4 +45,18 @@ export function destsFor(fen: string, from: string | null): string[] | undefined
   const fromIdx = parseSquare(from)
   if (fromIdx === undefined) return undefined
   return [...pos.dests(fromIdx)].map(makeSquare)
+}
+
+// FIX 1a: the live engine's `terminal` update carries no eval — `bestmove
+// (none)` on checkmate/stalemate never has a `pv`/`score` line for
+// parseInfoLine to read. This derives the eval straight from the position
+// itself instead, same source of truth pgn.ts's finalStatus() uses
+// (pos.isCheckmate()/isStalemate()). Mate value can't be 0 (EvalSchema), so a
+// delivered mate is reported as a nominal ±1 in the winner's sign — the eval
+// bar only reads the sign/type for a terminal position, never the magnitude.
+export function terminalEval(fen: string): Eval | null {
+  const pos = Chess.fromSetup(parseFen(fen).unwrap()).unwrap()
+  if (pos.isCheckmate()) return { type: 'mate', value: pos.turn === 'white' ? -1 : 1 }
+  if (pos.isStalemate()) return { type: 'cp', value: 0 }
+  return null
 }
