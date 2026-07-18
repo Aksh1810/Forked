@@ -1,10 +1,15 @@
 'use client'
 
-import { use, useEffect, useMemo, useState } from 'react'
+import { use, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { copy, pickTeaser } from '../../../copy'
 import { Story } from '../../../components/Story'
 import { getJob, type JobView } from '../../../lib/api'
+import { CountUp } from '../../../components/bits/CountUp'
+import { FadeContent } from '../../../components/bits/FadeContent'
+import { Noise } from '../../../components/bits/Noise'
+import { TextType } from '../../../components/bits/TextType'
+import { prefersReducedMotion } from '../../../components/bits/reducedMotion'
 
 // The progress experience: the multi-minute wait is the anticipation phase.
 // On completion this page becomes the story (Phase 4); until then it settles
@@ -15,6 +20,13 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
   const [job, setJob] = useState<JobView | null>(null)
   const [missing, setMissing] = useState(false)
   const [tick, setTick] = useState(0)
+  // D4: once complete+wrapped lands, hold the filled bar for a beat before
+  // swapping to the Story (skipped under reduced motion — an instant swap
+  // there isn't a jarring cut, it's just off).
+  const [readyForStory, setReadyForStory] = useState(false)
+  // K1: a single transient null must not strand the page on "missing"
+  // forever — only 3 consecutive failures count as actually gone.
+  const nullStreakRef = useRef(0)
 
   const terminal = job?.status === 'complete' || job?.status === 'failed'
 
@@ -37,8 +49,13 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
     async function poll() {
       const j = await getJob(jobId).catch(() => null)
       if (stop) return
-      if (j) setJob(j)
-      else setMissing(true)
+      if (j) {
+        nullStreakRef.current = 0
+        setJob(j)
+      } else {
+        nullStreakRef.current += 1
+        if (nullStreakRef.current >= 3) setMissing(true)
+      }
       if (stop) return
       timer = setTimeout(poll, Date.now() - startedAt > 60_000 ? 5000 : 2000)
     }
@@ -51,10 +68,13 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
 
   // One rotating status line on a 4-second cadence. The teaser slot replaces
   // it with real forming data once Phase 4 activates pickTeaser.
+  // K11: nothing left to rotate once the job is terminal — the status line
+  // isn't even rendered then.
   useEffect(() => {
+    if (terminal) return
     const iv = setInterval(() => setTick((t) => t + 1), 4000)
     return () => clearInterval(iv)
-  }, [])
+  }, [terminal])
 
   // Fetch the per-game failure list exactly once, when the job settles.
   useEffect(() => {
@@ -64,7 +84,27 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
 
   const pps = useMemo(() => positionsPerSecond(job), [job])
 
-  if (missing) {
+  // D4: hold the filled-bar terminal state for ~800ms once the job actually
+  // completes before swapping to the Story — an instant cut from "counting
+  // up" to "here's your story" read as the bar never finishing. Reduced
+  // motion skips the hold.
+  // Depends on the derived boolean, not the job object — the poll swaps the
+  // object every few seconds and would otherwise churn (and could reset)
+  // this timer.
+  const storyReady = job?.status === 'complete' && !!job.wrapped
+  useEffect(() => {
+    if (readyForStory || !storyReady) return
+    if (prefersReducedMotion()) {
+      setReadyForStory(true)
+      return
+    }
+    const t = setTimeout(() => setReadyForStory(true), 800)
+    return () => clearTimeout(t)
+  }, [storyReady, readyForStory])
+
+  // A job that already loaded never flips to "not found" — a null streak
+  // after that point is an API outage, and the loaded UI is more useful.
+  if (missing && !job) {
     return (
       <main className="flow progress-main">
         <p className="status-line">{copy.progress.notFound}</p>
@@ -74,17 +114,24 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
   if (!job) return <main className="flow progress-main" aria-busy="true" />
 
   // The page auto-transitions into the story on completion, at the same URL.
-  if (job.status === 'complete' && job.wrapped) {
-    return <Story wrapped={job.wrapped} jobId={jobId} />
+  if (job.status === 'complete' && job.wrapped && readyForStory) {
+    return (
+      <FadeContent blur duration={600}>
+        <Story wrapped={job.wrapped} jobId={jobId} />
+      </FadeContent>
+    )
   }
 
   const settled = job.completed + job.failed
-  const fraction = job.total > 0 ? settled / job.total : 0
+  // A completed job's bar reads as fully filled even if completed+failed
+  // hasn't quite caught up to total by the time status flips (D4's hold).
+  const fraction = job.total > 0 ? (job.status === 'complete' ? 1 : settled / job.total) : 0
   const statusLine = pickTeaser(job.agg, job.completed, job.total) ?? copy.statusLines[tick % copy.statusLines.length]
   const chips = [...job.ring].reverse()
 
   return (
     <main className="flow progress-main">
+      <Noise />
       <div
         className="eval-bar"
         role="progressbar"
@@ -95,29 +142,41 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
       >
         <div className="eval-bar-fill" style={{ width: `${fraction * 100}%` }} />
       </div>
+      {/* J3: the eval bar's fill is a purely visual progress signal — this
+          announces the same information as text. React only touches the DOM
+          text node when the rendered string actually changes, so this only
+          "updates" (and only interrupts a screen reader) when completed
+          does. */}
+      <span className="sr-only" aria-live="polite">
+        {copy.progress.srAnnounce(job.completed, job.total)}
+      </span>
 
       <div>
         <div className="mono big-counter">
-          {job.completed} / {job.total}
+          <CountUp to={job.completed} /> / {job.total}
         </div>
         <div className="counter-label">{copy.progress.gamesLabel}</div>
       </div>
 
-      {pps !== null && !terminal && (
-        <div>
-          <div className="mono big-counter">{pps.toFixed(1)}</div>
-          <div className="counter-label">{copy.progress.ppsLabel}</div>
-        </div>
-      )}
+      {/* K12: the slot always renders (a '—' placeholder pre-throughput or
+          once terminal) so the ETA line below never jumps when it mounts. */}
+      <div>
+        <div className="mono big-counter">{pps !== null && !terminal ? pps.toFixed(1) : '—'}</div>
+        <div className="counter-label">{copy.progress.ppsLabel}</div>
+      </div>
 
       {job.status === 'analyzing' && job.etaSeconds !== null && job.etaSeconds > 0 && (
         <p className="quiet">{etaLine(job.etaSeconds)}</p>
       )}
 
-      {!terminal && <p className="status-line">{statusLine}</p>}
+      {!terminal && (
+        <p className="status-line">
+          <TextType text={statusLine} />
+        </p>
+      )}
 
       {terminal && (
-        <div>
+        <FadeContent>
           <p className="status-line display" style={{ fontSize: '1.5rem', fontWeight: 700 }}>
             {job.status === 'complete' ? copy.progress.completeTitle : copy.progress.failedTitle}
           </p>
@@ -134,7 +193,7 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
               </ul>
             </div>
           )}
-        </div>
+        </FadeContent>
       )}
 
       {chips.length > 0 && (

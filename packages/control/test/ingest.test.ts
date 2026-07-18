@@ -212,6 +212,25 @@ test('pasted PGN needs no username, no lock, and gets stable game ids', async ()
   ])
 })
 
+test('an oversized PGN paste is rejected before parsing or any storage call', async () => {
+  const { deps, calls } = fakeDeps(() => ({}))
+  const res = await ingest(deps, cfg, stubChessCom([], {}), {
+    pgn: 'x'.repeat(2_000_001),
+    ip: 'i',
+  })
+  expect(res).toMatchObject({ ok: false, status: 422, code: 'archive-too-large' })
+  expect(calls).toHaveLength(0)
+})
+
+test('rotating usernames still trips the per-IP limiter', async () => {
+  const { deps } = fakeDeps((call) => {
+    if (call.name === 'UpdateCommand' && call.input.Key.pk === 'RATE#@ip#1.2.3.4') throw ccf()
+    return {}
+  })
+  const res = await ingest(deps, cfg, stubChessCom([], {}), { username: 'fresh_name', ip: '1.2.3.4' })
+  expect(res).toMatchObject({ ok: false, status: 429, code: 'rate-limited' })
+})
+
 test('a PGN paste past the per-job cap is rejected before any job is created', async () => {
   const { deps, calls } = fakeDeps(() => ({}))
   const paste = Array.from({ length: 7 }, () => SCHOLARS).join('\n\n')

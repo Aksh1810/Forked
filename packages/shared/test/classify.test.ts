@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { classifyWinPctSwing, enrichClassifications, moveMotif, turningPoint } from '../src/classify.js'
+import { classifyLive, classifyWinPctSwing, enrichClassifications, moveMotif, turningPoint } from '../src/classify.js'
 import type { Eval, EngineRecord, PlyAnalysis } from '../src/schemas.js'
 import { winPctFromCp } from '../src/win.js'
 import { ITALIAN } from './analyzed-game.js'
@@ -382,4 +382,43 @@ test('a terminal checkmate ply (evalAfter null) is handled without crashing and 
     ],
   )
   expect(turningPoint(record)).toBe(6)
+})
+
+// --- classifyLive ---
+//
+// Expected tiers depend on moverWinPct's sigmoid curve, not the raw cp
+// values. cp inputs below were picked with a scratch script (binary search
+// over winPctFromCp, same approach as cpForWhiteWinPct above) so each loss
+// lands squarely inside its intended band rather than near a boundary.
+
+test('classifyLive: playedBest wins regardless of swing', () => {
+  expect(classifyLive({ type: 'cp', value: 20 }, { type: 'cp', value: 10 }, 'white', true)).toBe('best')
+})
+
+test('classifyLive: tiny loss is excellent, small loss is good', () => {
+  // white 54.95 -> 54.04: loss 0.91, under 2
+  expect(classifyLive({ type: 'cp', value: 54 }, { type: 'cp', value: 44 }, 'white', false)).toBe('excellent')
+  // white 54.95 -> 50.00: loss 4.95, between 2 and 10
+  expect(classifyLive({ type: 'cp', value: 54 }, { type: 'cp', value: 0 }, 'white', false)).toBe('good')
+})
+
+test('classifyLive: loss bands map to inaccuracy/mistake', () => {
+  // white 50.00 -> 35.01: loss 14.99, in the [10,20) inaccuracy band
+  expect(classifyLive({ type: 'cp', value: 0 }, { type: 'cp', value: -168 }, 'white', false)).toBe('inaccuracy')
+  // white 50.00 -> 25.03: loss 24.97, in the [20,30) mistake band
+  expect(classifyLive({ type: 'cp', value: 0 }, { type: 'cp', value: -298 }, 'white', false)).toBe('mistake')
+})
+
+test('classifyLive: catastrophic blunder stays blunder (mate against mover)', () => {
+  expect(classifyLive({ type: 'cp', value: 0 }, { type: 'mate', value: -3 }, 'white', false)).toBe('blunder')
+})
+
+test('classifyLive: non-catastrophic 30-40pt swing downgrades to mistake (blunder gate)', () => {
+  // white 59.99 -> 25.03: loss 34.96 (30-40, non-catastrophic) and wpAfter > 15
+  expect(classifyLive({ type: 'cp', value: 110 }, { type: 'cp', value: -298 }, 'white', false)).toBe('mistake')
+})
+
+test('classifyLive: black perspective (white-perspective evals negated for the mover)', () => {
+  // black mover: cp -54 is 54.95% for black; dropping to cp 0 (50% for black) is a loss of 4.95
+  expect(classifyLive({ type: 'cp', value: -54 }, { type: 'cp', value: 0 }, 'black', false)).toBe('good')
 })

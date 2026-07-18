@@ -29,7 +29,12 @@ export function EvalBar({ ev, flip, height }: { ev: Eval; flip: boolean; height?
       <div className="game-eval-bar-white" style={{ height: `${white}%` }} />
       <span
         className="game-eval-bar-label"
-        style={{ ...(labelAtTop ? { top: 3 } : { bottom: 3 }), color: whiteWinning ? '#333' : '#eee' }}
+        // A3: matches --eval-dark/--eval-light, the same tokens the fill
+        // bars below use — the label sits inside the winning side's fill.
+        style={{
+          ...(labelAtTop ? { top: 3 } : { bottom: 3 }),
+          color: whiteWinning ? 'var(--eval-dark)' : 'var(--eval-light)',
+        }}
       >
         {label}
       </span>

@@ -20,3 +20,17 @@ test('leaderboard and metrics are CDN-cacheable; job status is per-client only',
   const job = await app.request('/job/some-job-id')
   expect(job.headers.get('Cache-Control')).toBe('private, max-age=1')
 })
+
+test('the browse list rate-limits per IP', async () => {
+  const { ConditionalCheckFailedException } = await import('@aws-sdk/client-dynamodb')
+  const { deps } = fakeDeps((call) => {
+    if (call.name === 'UpdateCommand' && String(call.input.Key?.pk).startsWith('RATE#@games#')) {
+      throw new ConditionalCheckFailedException({ $metadata: {}, message: 'conditional check failed' })
+    }
+    return {}
+  })
+  const app = makeApp(deps, cfg, chesscom, { cors: false })
+  const res = await app.request('/games/somebody')
+  expect(res.status).toBe(429)
+  expect(await res.json()).toMatchObject({ ok: false, code: 'rate-limited' })
+})

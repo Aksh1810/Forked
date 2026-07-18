@@ -21,6 +21,31 @@ export function classifyWinPctSwing(wpBefore: number, wpAfter: number): Classifi
   return 'none'
 }
 
+// Live (browser-engine) per-move tier for user-played moves: the subset of
+// enrichClassifications computable from ONE eval pair. No book detection, no
+// sacrifice/great heuristics, no miss-relabel (those need mainline context).
+// ponytail: 'brilliant'/'great'/'miss'/'book' unreachable here by design.
+export function classifyLive(
+  before: Eval,
+  after: Eval,
+  mover: 'white' | 'black',
+  playedBest: boolean,
+): Enriched {
+  if (playedBest) return 'best'
+  const wpBefore = moverWinPct(before, mover)
+  const wpAfter = moverWinPct(after, mover)
+  const loss = wpBefore - wpAfter
+  const base = classifyWinPctSwing(wpBefore, wpAfter)
+  // Same blunder gate as enrichClassifications: only catastrophic keeps it.
+  if (base === 'blunder' && !mateAgainstMover(after, mover) && loss < 40 && wpAfter > 15) {
+    return 'mistake'
+  }
+  if (base !== 'none') return base
+  if (loss < 2) return 'excellent'
+  if (loss < 10) return 'good'
+  return 'none'
+}
+
 // The presentation-layer tier set (chess.com-style). Derived from the stored
 // EngineRecord at render time — never persisted, never re-analyzed. Stored
 // `classification` remains the source of truth for insights/aggregates; this

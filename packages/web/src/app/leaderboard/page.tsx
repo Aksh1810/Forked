@@ -3,6 +3,8 @@ import { BRAND_NAME } from '@forked/shared'
 import { Board } from '../../components/Board'
 import { EvalCliff } from '../../components/EvalCliff'
 import { RemoveMe } from '../../components/RemoveMe'
+import { FadeContent } from '../../components/bits/FadeContent'
+import { SpotlightCard } from '../../components/bits/SpotlightCard'
 import { copy } from '../../copy'
 import { getLeaderboard } from '../../lib/api'
 
@@ -19,9 +21,13 @@ export default async function Leaderboard({
   const { tab } = await searchParams
   const blunderTab = tab === 'blunder'
   const board = await getLeaderboard()
+  // I9: board === null is a fetch outage, distinct from a real empty board
+  // (board.users.length === 0) — the two used to share one "empty" copy.
+  const outage = board === null
 
   return (
     <main className="dash">
+      {/* D5: the landing page keeps the only ambient DotGrid field. */}
       <div className="dash-head">
         <h1 className="display" style={{ fontSize: '1.75rem', margin: 0 }}>
           {copy.leader.title}
@@ -45,9 +51,40 @@ export default async function Leaderboard({
       {!blunderTab && (
         <>
           <p className="quiet">{copy.leader.floorNote}</p>
-          {!board || board.users.length === 0 ? (
+          {outage ? (
+            <p className="quiet">{copy.outage.leaderboard}</p>
+          ) : board.users.length === 0 ? (
             <p className="quiet">{copy.leader.empty}</p>
           ) : (
+            // C5: no FadeContent — this is the primary content of the page's
+            // default tab, not a below-the-fold reveal.
+            <>
+            {/* Top-3 podium: the page is about ranking, so the top ranks get
+                visual weight the table can't give them. H1: always 3 slots —
+                an unfilled one is a ghost card, not a shorter grid. */}
+            <div className="podium">
+              {Array.from({ length: 3 }, (_, i) => board.users[i]).map((u, i) =>
+                u ? (
+                  <SpotlightCard key={u.username} className="panel">
+                    <div className="podium-rank mono">#{i + 1}</div>
+                    <Link href={`/u/${encodeURIComponent(u.username)}`}>{u.username}</Link>
+                    <div className="podium-acc mono">
+                      {u.accuracy.toFixed(1)}
+                      <span style={{ fontSize: '0.6em', color: 'var(--muted)' }}>%</span>
+                    </div>
+                    <div className="quiet" style={{ fontSize: 13 }}>
+                      {/* B9: mark is muted, not the red accent-text. */}
+                      {u.archetype.name} <span className="mono" style={{ color: 'var(--muted)' }}>{u.archetype.mark}</span>
+                    </div>
+                  </SpotlightCard>
+                ) : (
+                  <Link key={`ghost-${i}`} href="/" className="panel podium-ghost">
+                    <div className="podium-rank mono">{copy.leader.podiumGhost(i + 1)}</div>
+                    <div className="quiet">{copy.leader.podiumGhostCta}</div>
+                  </Link>
+                ),
+              )}
+            </div>
             <div className="table-scroll">
             <table className="game-table">
               <thead>
@@ -70,37 +107,44 @@ export default async function Leaderboard({
                     <td className="mono quiet">{u.games}</td>
                     <td className="quiet">
                       {/* Name first, mark after (matches Card.tsx/Story.tsx): a
-                          leading "!"/"??" glyph before the name read like a typo. */}
-                      {u.archetype.name} <span className="mono" style={{ color: 'var(--accent-text)' }}>{u.archetype.mark}</span>
+                          leading "!"/"??" glyph before the name read like a typo.
+                          B9: mark is muted, not the red accent-text. */}
+                      {u.archetype.name} <span className="mono" style={{ color: 'var(--muted)' }}>{u.archetype.mark}</span>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             </div>
+            </>
           )}
-          {board && board.users.length > 0 && <p className="quiet">{copy.leader.archetypeNote}</p>}
+          {!outage && board.users.length > 0 && <p className="quiet">{copy.leader.archetypeNote}</p>}
         </>
       )}
 
       {blunderTab &&
-        (!board?.blunder ? (
+        (outage ? (
+          <p className="quiet">{copy.outage.leaderboard}</p>
+        ) : !board.blunder ? (
           <p className="quiet">{copy.leader.emptyBlunder}</p>
         ) : (
-          <section className="panel" style={{ maxWidth: 480 }}>
-            <p className="panel-title">{copy.leader.blunderBy(board.blunder.username)}</p>
-            <p>
-              {copy.leader.blunderLine(
-                board.blunder.move,
-                board.blunder.lossPct,
-                board.blunder.opponent,
-              )}
-            </p>
-            <Board fen={board.blunder.fen} alt={`position after ${board.blunder.move}`} />
-            {board.blunder.cliff.length > 1 && <EvalCliff series={board.blunder.cliff} />}
-          </section>
+          <FadeContent>
+            <section className="panel" style={{ maxWidth: 480 }}>
+              <p className="panel-title">{copy.leader.blunderBy(board.blunder.username)}</p>
+              <p>
+                {copy.leader.blunderLine(
+                  board.blunder.move,
+                  board.blunder.lossPct,
+                  board.blunder.opponent,
+                )}
+              </p>
+              <Board fen={board.blunder.fen} alt={`position after ${board.blunder.move}`} />
+              {board.blunder.cliff.length > 1 && <EvalCliff series={board.blunder.cliff} />}
+            </section>
+          </FadeContent>
         ))}
 
+      {/* C5: no FadeContent — always-visible utility section, not a reveal. */}
       <section style={{ marginTop: '2rem' }}>
         <p className="panel-title">{copy.leader.removeTitle}</p>
         <p className="quiet">{copy.leader.removeNote}</p>
