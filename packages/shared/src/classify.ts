@@ -135,8 +135,11 @@ export function enrichClassifications(record: EngineRecord): Enriched[] {
     } else if (swing !== 'none') {
       // Relabel: the opponent just handed the mover a big edge (>=7.5 win-pts)
       // and the mover was still comfortably ahead (>=70) going into this
-      // move — a miss, not just a mistake/inaccuracy/blunder.
-      tier = prevLoss >= 7.5 && wpBefore >= 70 ? 'miss' : swing
+      // move — a miss, not just a mistake/blunder. Inaccuracy-grade swings
+      // stay inaccuracies: relabeling them too inflated the bad-move count to
+      // 8 where chess.com's Game Review of the same game showed 5.
+      tier =
+        (swing === 'mistake' || swing === 'blunder') && prevLoss >= 7.5 && wpBefore >= 70 ? 'miss' : swing
       // Blunder gate (chess.com classification-v2 style): a 'blunder' keeps
       // that display tier only when it's catastrophic — otherwise it reads
       // as a plain mistake. ponytail: win%-swing + terminal signals only,
