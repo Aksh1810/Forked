@@ -1,7 +1,7 @@
 import { Chess, normalizeMove } from 'chessops/chess'
 import { makeFen } from 'chessops/fen'
 import { parseUci } from 'chessops/util'
-import { accuracyFromAvgLoss, gameAccuracies } from './accuracy.js'
+import { moveAccuracyPct, gameAccuracies } from './accuracy.js'
 import { openingFamily } from './aggregates.js'
 import { gamePhases, type GamePhase } from './phases.js'
 import { matchOpening } from './openings.js'
@@ -171,10 +171,10 @@ export interface Insights {
 }
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
-const accOf = (moves: readonly UserMove[]) => {
-  const a = avg(moves.map((m) => m.lossPct))
-  return a === null ? null : accuracyFromAvgLoss(a)
-}
+// Per-move accuracy, then mean — not the curve applied to the average loss
+// (see accuracy.ts). moves here already excludes book plies (userMoves drops
+// them), so there is no book-credit case to handle at this call site.
+const accOf = (moves: readonly UserMove[]) => avg(moves.map((m) => moveAccuracyPct(m.lossPct)))
 
 // Recomputes every final aggregate from the full joined data. The finalizer's
 // core; deterministic and pure so it is unit-testable without any store.

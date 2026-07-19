@@ -181,12 +181,15 @@ export function Board({
         maxWidth: '100%',
         aspectRatio: '1 / 1',
         border: '1px solid var(--line)',
-        // I3: 'none' only while an actual drag is in flight — a clickable
-        // board otherwise allows vertical page scroll (pan-y). `drag` is set
-        // on pointerdown and cleared on pointerup/cancel, so this already
-        // tracks the in-progress-drag window without extra imperative DOM
-        // writes.
-        touchAction: drag ? 'none' : onSquareClick ? 'pan-y' : undefined,
+        // I3, corrected: touch-action is locked in at gesture START, so
+        // flipping it mid-gesture (the old `drag ? 'none' : 'pan-y'`) never
+        // affected the gesture already underway — touch drags turned into
+        // page scrolls and the browser pointercanceled the move. The grid
+        // allows pan-y (page still scrolls when the swipe starts on an empty
+        // square); squares HOLDING PIECES declare 'none' below, and the
+        // touched element's value intersects with ancestors, so drags that
+        // start on a piece stay drags.
+        touchAction: onSquareClick ? 'pan-y' : undefined,
       }}
     >
       {grid.flatMap((row, r) =>
@@ -219,6 +222,9 @@ export function Board({
                 placeItems: 'center',
                 background: dark ? 'var(--sq-dark)' : 'var(--sq-light)',
                 cursor: onSquareClick ? 'pointer' : undefined,
+                // See the grid-level comment: piece squares must opt out of
+                // pan-y BEFORE the gesture starts or touch drags can't exist.
+                touchAction: onSquareClick && piece ? 'none' : undefined,
               }}
             >
               {tinted && (

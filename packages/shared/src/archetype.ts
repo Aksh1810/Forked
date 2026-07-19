@@ -1,4 +1,4 @@
-import { accuracyFromAvgLoss, gameAccuracies } from './accuracy.js'
+import { moveAccuracyPct, gameAccuracies } from './accuracy.js'
 import { openingFamily } from './aggregates.js'
 import { finalStatus } from './pgn.js'
 import { userMoves, type AnalyzedGame } from './insights.js'
@@ -145,11 +145,13 @@ export function computeArchetypeFeatures(
       if (m.ply > book && m.ply <= book + 6) postBookLosses.push(m.lossPct)
     }
   }
+  // Per-move accuracy, then mean — not the curve applied to the average loss
+  // (see accuracy.ts). Both inputs already exclude book plies.
   const overallAcc = allMoves.length
-    ? accuracyFromAvgLoss(allMoves.reduce((s, m) => s + m.lossPct, 0) / allMoves.length)
+    ? allMoves.reduce((s, m) => s + moveAccuracyPct(m.lossPct), 0) / allMoves.length
     : null
   const postBookAcc = postBookLosses.length
-    ? accuracyFromAvgLoss(postBookLosses.reduce((a, b) => a + b, 0) / postBookLosses.length)
+    ? postBookLosses.reduce((s, l) => s + moveAccuracyPct(l), 0) / postBookLosses.length
     : null
   const postBookAccuracyDropPct =
     overallAcc !== null && postBookAcc !== null ? overallAcc - postBookAcc : null

@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 import { LiveEngine, parseInfoLine, type EngineUpdate } from '../src/lib/engine.js'
 
 test('parses a positive cp score, white to move', () => {
@@ -86,17 +86,34 @@ class FakeWorker {
   }
 }
 
-// engine.ts only touches `document` inside start()/dispose() (visibilitychange),
-// which this suite doesn't exercise beyond registering/removing the listener.
-// The packages/web vitest project is node-env, so stub just enough to satisfy
-// those calls without changing anything about LiveEngine itself.
+// engine.ts only touches `document` inside start()/dispose() (visibilitychange)
+// and startSearch() (document.hidden). The packages/web vitest project is
+// node-env, so stub just enough to satisfy those calls: a controllable
+// `hidden` flag plus a real listener registry (FIX 5a needs to actually fire
+// the handler LiveEngine registered, not just accept-and-drop it).
+let fakeDocument: { hidden: boolean; listeners: (() => void)[] }
+
 beforeEach(() => {
+  fakeDocument = { hidden: false, listeners: [] }
   ;(globalThis as unknown as { document: unknown }).document = {
-    hidden: false,
-    addEventListener() {},
-    removeEventListener() {},
+    get hidden() {
+      return fakeDocument.hidden
+    },
+    addEventListener(type: string, cb: () => void) {
+      if (type === 'visibilitychange') fakeDocument.listeners.push(cb)
+    },
+    removeEventListener(type: string, cb: () => void) {
+      if (type === 'visibilitychange') fakeDocument.listeners = fakeDocument.listeners.filter((l) => l !== cb)
+    },
   }
 })
+
+// test helper — flips document.hidden and fires every registered
+// visibilitychange listener, same as a real tab switch would.
+function fireVisibility(hidden: boolean) {
+  fakeDocument.hidden = hidden
+  for (const l of [...fakeDocument.listeners]) l()
+}
 
 async function setup(): Promise<{ engine: LiveEngine; worker: FakeWorker }> {
   let worker!: FakeWorker
@@ -230,4 +247,88 @@ test('an interrupted search finishing with bestmove (none) does not emit a termi
 
   expect(worker.posted.at(-2)).toBe('position fen fenB w - - 0 1')
   expect(worker.posted.at(-1)).toBe('go movetime 8000')
+})
+
+// --- FIX 2/3/4 hardening tests -----------------------------------------------
+
+test('FIX 2: a queued search launched by a hidden tab does not start until shown again', async () => {
+  const { engine, worker } = await setup()
+  engine.analyze('fenA w - - 0 1', () => {})
+  expect(worker.posted.at(-1)).toBe('go movetime 8000')
+
+  fireVisibility(true) // tab hidden — onVisibility posts its own stop
+  expect(worker.posted.at(-1)).toBe('stop')
+
+  const updatesB: EngineUpdate[] = []
+  engine.analyze('fenB w - - 0 1', (u) => updatesB.push(u)) // interrupts while hidden, queues fenB
+
+  // fenA's bestmove (the abandoned search reporting in) would, pre-fix, hand
+  // straight into startSearch(fenB) and post position+go into the hidden tab.
+  worker.emit('bestmove a2a3 ponder a7a6')
+  expect(worker.posted.filter((m) => m.startsWith('position fen'))).toEqual(['position fen fenA w - - 0 1'])
+  expect(updatesB).toHaveLength(0)
+
+  fireVisibility(false) // tab shown again — onVisibility resumes the target fen
+  expect(worker.posted.at(-2)).toBe('position fen fenB w - - 0 1')
+  expect(worker.posted.at(-1)).toBe('go movetime 8000')
+})
+
+test('FIX 3: a lost bestmove is rescued by the watchdog, which starts the queued search', async () => {
+  vi.useFakeTimers()
+  try {
+    const { engine, worker } = await setup()
+    engine.analyze('fenA w - - 0 1', () => {})
+    expect(worker.posted.at(-1)).toBe('go movetime 8000')
+
+    const updatesB: EngineUpdate[] = []
+    engine.analyze('fenB w - - 0 1', (u) => updatesB.push(u)) // queues fenB, posts stop
+    expect(worker.posted.filter((m) => m === 'stop')).toHaveLength(1)
+
+    // fenA's bestmove never arrives — nothing else would ever clear
+    // `searching`/launch the queued search without the watchdog.
+    vi.advanceTimersByTime(12_000)
+
+    expect(worker.posted.at(-2)).toBe('position fen fenB w - - 0 1')
+    expect(worker.posted.at(-1)).toBe('go movetime 8000')
+
+    worker.emit('info depth 12 score cp 7 pv d2d4')
+    expect(updatesB).toHaveLength(1)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('FIX 4: a stray bestmove while idle does not emit and does not poison the cache', async () => {
+  const { engine, worker } = await setup()
+  const updates: EngineUpdate[] = []
+  engine.analyze('fenA w - - 0 1', (u) => updates.push(u))
+  worker.emit('info depth 12 score cp 25 pv e2e4')
+  worker.emit('bestmove e2e4 ponder e7e5') // legitimate completion — searching now false
+  expect(updates).toHaveLength(1)
+
+  // A second, stray bestmove for the same already-finished search (e.g. a
+  // duplicate/late worker event). Without the `!searching` guard this would
+  // emit another update and, being `(none)`, cache a false terminal marker
+  // under fenA — a real, non-terminal position.
+  worker.emit('bestmove (none)')
+  expect(updates).toHaveLength(1) // no second update delivered
+
+  const replay: EngineUpdate[] = []
+  engine.analyze('fenA w - - 0 1', (u) => replay.push(u))
+  expect(replay).toEqual([{ depth: 12, lines: [{ eval: { type: 'cp', value: 25 }, pvUci: ['e2e4'] }] }])
+})
+
+test('FIX 3: stop() then dispose() clears the watchdog timer, no dangling setTimeout', async () => {
+  vi.useFakeTimers()
+  try {
+    const { engine } = await setup()
+    engine.analyze('fenA w - - 0 1', () => {})
+    expect(vi.getTimerCount()).toBe(1) // the watchdog, armed by startSearch
+
+    engine.stop()
+    engine.dispose()
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    vi.useRealTimers()
+  }
 })

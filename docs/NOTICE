@@ -9,10 +9,31 @@ Public License version 3 (GPLv3), developed by the Stockfish developers.
   Source:  https://github.com/official-stockfish/Stockfish
   License: https://www.gnu.org/licenses/gpl-3.0.html
 
-Stockfish is executed strictly as a separate operating system process over
-the UCI protocol. It is not linked into, compiled into, or vendored within
-this repository. The worker's Docker image downloads the pinned official
-Stockfish release at build time and carries this same attribution.
+Stockfish is not linked into, compiled into, or vendored within this
+repository. It is used in two places, in both cases as a separate program
+communicating over the UCI protocol:
+
+  1. Server-side analysis (packages/worker): executed as a separate
+     operating system process. The worker's Docker image downloads the
+     pinned official Stockfish release at build time and carries this same
+     attribution.
+
+  2. Browser-side live analysis (packages/web): the single-threaded
+     WebAssembly build published as the "stockfish" npm package, loaded in a
+     dedicated Web Worker. It is copied out of node_modules into
+     packages/web/public/engine/ at build time and served as a static asset;
+     that directory is gitignored and the binary is not committed here. Its
+     GPLv3 license text is copied alongside it and served at
+     /engine/Copying.txt, linked from the application's /about page.
+
+  wasm build source: https://github.com/nmrugg/stockfish.js
+
+The chess board piece set is the cburnett set by Colin M.L. Burnett,
+tri-licensed GPLv2+ / BSD / GFDL. It is vendored into this repository,
+inlined as JSX at packages/web/src/components/pieces.tsx, from the
+public/piece/cburnett/ directory of lichess-org/lila.
+
+  Source: https://github.com/lichess-org/lila
 
 The embedded opening book table (packages/shared/src/openings.gen.ts) is
 generated from the lichess-org/chess-openings dataset, dedicated to the
