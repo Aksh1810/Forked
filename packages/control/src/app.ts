@@ -76,6 +76,19 @@ export function makeApp(
     if (month !== undefined && !MONTH_RE.test(month)) {
       return c.json({ ok: false, code: 'bad-request' }, 400)
     }
+    // Per-IP daily cap: each uncached (username, month) pair writes up to a
+    // 380KB archive item and hits chess.com upstream, so an unthrottled
+    // crawler could bloat the table and hammer their API from our address.
+    // 300/day is far past any real browsing session. '@games' cannot collide
+    // with a real username ('@' fails USERNAME_RE).
+    try {
+      await bumpRate(deps, '@games', clientIp(c), 300)
+    } catch (e) {
+      if (e instanceof ConditionalCheckFailedException) {
+        return c.json({ ok: false, code: 'rate-limited' }, 429)
+      }
+      throw e
+    }
     try {
       return c.json(await getUserGames(chesscom, username, month))
     } catch (e) {

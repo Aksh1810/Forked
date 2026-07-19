@@ -14,7 +14,7 @@ const itEngine = it.skipIf(!available && !process.env.CI)
 
 const NODES = 20_000
 const fixture = (name: string) =>
-  readFileSync(new URL(`../../../fixtures/pgn/${name}`, import.meta.url), 'utf8')
+  readFileSync(new URL(`../../../fixtures/fake-engines/pgn/${name}`, import.meta.url), 'utf8')
 
 function parsed(name: string) {
   const g = parseGamePgn(fixture(name))

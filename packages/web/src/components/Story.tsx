@@ -7,6 +7,9 @@ import { story, share, delighterLines } from '../copy'
 import { Board } from './Board'
 import { Card } from './Card'
 import { EvalCliff } from './EvalCliff'
+import { Shuffle } from './bits/Shuffle'
+import { CountUp } from './bits/CountUp'
+import { usePrefersReducedMotion } from './bits/reducedMotion'
 
 // The eight-slide story: the anticipation payoff. Tap / click / arrow-key
 // advance, progress dots rendered as tiny annotation marks, "Skip to card"
@@ -24,6 +27,9 @@ export function Story({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: stri
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // J5: a keypress landing in a real control (the "Skip to card" link, a
+      // form field on the card slide) must not also advance the slide.
+      if ((e.target as HTMLElement).closest('button,a,input,textarea,select')) return
       if (e.key === 'ArrowRight' || e.key === ' ') {
         e.preventDefault()
         go(i + 1)
@@ -51,7 +57,9 @@ export function Story({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: stri
           <button
             key={n}
             aria-label={`slide ${n + 1}`}
-            aria-current={n === i}
+            // J6: aria-current only when actually true — aria-current="false"
+            // on every other dot is noise a screen reader doesn't need.
+            aria-current={n === i || undefined}
             onClick={() => go(n)}
             className="mono"
             style={{
@@ -60,7 +68,9 @@ export function Story({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: stri
               cursor: 'pointer',
               minWidth: 44,
               minHeight: 44,
-              color: n === i ? 'var(--blunder)' : 'var(--line)',
+              // B6/J6: bone for the active dot, muted (not --line, which
+              // fails 3:1) for the rest.
+              color: n === i ? 'var(--bone)' : 'var(--muted)',
               fontSize: 14,
             }}
           >
@@ -84,11 +94,14 @@ export function Story({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: stri
           flexDirection: 'column',
           justifyContent: 'center',
           gap: 16,
-          transition: reduced ? 'none' : 'transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1.2)',
           cursor: onCard ? 'default' : 'pointer',
         }}
       >
-        {slides[i].node(reduced)}
+        {/* Keyed by slide index so each advance re-runs the entrance
+            animation; reduced motion drops the class and slides cut. */}
+        <div key={i} className={reduced ? undefined : 'story-slide-in'}>
+          {slides[i].node(reduced)}
+        </div>
       </section>
 
       <footer style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0' }}>
@@ -125,10 +138,10 @@ function buildSlides(w: WrappedSummary, jobId: string): Slide[] {
 
   // 1. Scale
   slides.push({
-    node: (reduced) => (
+    node: () => (
       <div>
         <H>
-          We judged <Count value={w.totalPositions} reduced={reduced} /> positions across {w.totalGames} games.
+          We judged <CountUp to={w.totalPositions} className="mono" /> positions across {w.totalGames} games.
         </H>
         <p className="quiet">{story.scaleSub}</p>
       </div>
@@ -137,11 +150,11 @@ function buildSlides(w: WrappedSummary, jobId: string): Slide[] {
 
   // 2. Accuracy as identity
   slides.push({
-    node: (reduced) => (
+    node: () => (
       <div>
         {kicker(story.accuracyTitle)}
         <div className="mono" style={{ fontSize: 'clamp(3rem, 2rem + 8vw, 6rem)', fontWeight: 500 }}>
-          {w.accuracy !== null ? <Count value={w.accuracy} reduced={reduced} decimals={1} /> : '--'}
+          {w.accuracy !== null ? <CountUp to={w.accuracy} decimals={1} /> : '--'}
           <span style={{ fontSize: '0.4em', color: 'var(--muted)' }}>%</span>
         </div>
         <p className="quiet">
@@ -255,7 +268,7 @@ function buildSlides(w: WrappedSummary, jobId: string): Slide[] {
       <div style={{ display: 'grid', gap: 8, justifyItems: 'center', textAlign: 'center' }}>
         {kicker(story.archetypeKicker)}
         <div className="display" style={{ fontSize: 'clamp(2.5rem, 1.5rem + 6vw, 5rem)', fontWeight: 800, lineHeight: 1 }}>
-          {w.archetype.name}
+          <Shuffle text={w.archetype.name} />
         </div>
         <div style={{ fontSize: 40, color: 'var(--blunder)' }} className="mono">
           {w.archetype.mark}
@@ -317,38 +330,3 @@ function BucketChart({ buckets }: { buckets: WrappedSummary['timePressure']['buc
   )
 }
 
-// Count-up when the slide mounts; renders the final value instantly under
-// reduced motion. tabular-nums on the container keeps it from shifting layout.
-// No cross-mount "once" guard: a ref guard is defeated by strict mode's
-// mount/unmount/remount and would strand the number at zero.
-function Count({ value, reduced, decimals = 0 }: { value: number; reduced: boolean; decimals?: number }) {
-  const [n, setN] = useState(reduced ? value : 0)
-  useEffect(() => {
-    if (reduced) {
-      setN(value)
-      return
-    }
-    const t0 = performance.now()
-    let raf = 0
-    const step = (t: number) => {
-      const k = Math.min(1, (t - t0) / 800)
-      setN(value * (1 - Math.pow(1 - k, 3)))
-      if (k < 1) raf = requestAnimationFrame(step)
-    }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
-  }, [value, reduced])
-  return <span>{n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}</span>
-}
-
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    setReduced(mq.matches)
-    const on = () => setReduced(mq.matches)
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [])
-  return reduced
-}

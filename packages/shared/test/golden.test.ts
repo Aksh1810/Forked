@@ -77,13 +77,31 @@ const record: EngineRecord = {
   ],
 }
 
+// Re-pinned 2026-07-19 for the tier-band parity spec (bands changed BY
+// DESIGN, calibrated against a per-ply diff of a real chess.com Game Review:
+// inaccuracy>=5/mistake>=12/blunder>=20, excellent<2/good<5). Recomputed with
+// an independent scratch reimplementation of classifyWinPctSwing/
+// enrichClassifications (not by running this suite and copying its output).
+// Two plies change from the previous (2026-07-1x) pin:
+//  - ply 8 (Bxb4): loss is 10.0381 (wpBefore 90.009 -> wpAfter 79.971). Under
+//    the old mistake floor (7.5) this was a 'mistake' swing that the
+//    prevLoss>=7.5 miss-relabel branch caught, reading 'miss'. The new
+//    mistake floor (12) puts 10.0381 below it, in the inaccuracy band
+//    (>=5,<12) instead — the swing is 'inaccuracy', which the miss-relabel
+//    branch never touches (it only relabels mistake/blunder swings), so ply
+//    8 now reads 'inaccuracy' directly.
+//  - ply 10 (Ba5): loss is 4.9834. Under the old inaccuracy floor (4) this
+//    was an 'inaccuracy' swing. The new inaccuracy floor (5) puts 4.9834
+//    below it, so the swing is 'none' and the ply falls through to the
+//    excellent/good check on raw loss: 4.9834 is under the new GOOD_MAX (5),
+//    so it now reads 'good'.
 test('golden record: enrichClassifications output is pinned', () => {
   expect(enrichClassifications(record)).toEqual([
     'book', 'book', 'book', 'book',
     'best', 'best',
-    'blunder', 'great',
+    'blunder', 'inaccuracy',
     'best', 'good',
-    'best', 'inaccuracy',
+    'best', 'excellent',
   ])
 })
 
@@ -91,8 +109,24 @@ test('golden record: turningPoint is pinned', () => {
   expect(turningPoint(record)).toBe(7)
 })
 
+// Re-pinned for the new curve (180*exp(-0.05x)-80, clamp point ~16.22
+// win-pts) and the gameAccuracies blend (15% best-move rate, 85% mean move
+// accuracy, with a stretch below 62 — see accuracy.ts).
+// White's 6 moves (plies 1,3,5,7,9,11): book, book, quiet gain (acc 100),
+// ply 7's own 42.033-pt blunder (past the clamp, acc 0), quiet gain (100),
+// quiet gain (100). White accs = [100, 100, 100, 0, 100, 100] -> meanAcc
+// 500/6 = 83.3333. Of the 4 non-book white plies (5,7,9,11), 3 play the
+// best move (7's stored blunder does not) -> bestPct = 75. raw = 0.15*75 +
+// 0.85*83.3333 = 82.0833, no stretch (>=62) -> white = 82.0833.
+// Black's 6 moves (plies 2,4,6,8,10,12): book, book, quiet gain (100),
+// ply 8's 10.0381-pt loss (180*exp(-0.05*10.0381)-80 = 28.9677), ply 10's
+// 4.9834-pt loss (180*exp(-0.05*4.9834)-80 = 60.3005), quiet gain (100).
+// Black accs = [100, 100, 100, 28.9677, 60.3005, 100] -> meanAcc
+// 489.2682/6 = 81.5447. Of the 4 non-book black plies (6,8,10,12), 2 play
+// the best move (6,8 do; 10,12 don't) -> bestPct = 50. raw = 0.15*50 +
+// 0.85*81.5447 = 76.8130, no stretch -> black = 76.8130.
 test('golden record: gameAccuracies is pinned', () => {
   const acc = gameAccuracies(record, null)
-  expect(acc.white).toBeCloseTo(62.1219, 4)
-  expect(acc.black).toBeCloseTo(84.4380, 4)
+  expect(acc.white).toBeCloseTo(82.0833, 2)
+  expect(acc.black).toBeCloseTo(76.8130, 2)
 })

@@ -3,17 +3,21 @@ import type { Enriched } from '@forked/shared'
 // One place for tier -> {color, glyph, word}. Board badges, move-list chips,
 // the coach card, and the eval graph all read this map instead of keeping
 // their own copies.
+// A3: reads the --cls-* custom properties rather than repeating their hex
+// values — chart/EvalCliff exports (which read TIER[t].color as plain CSS
+// color strings, including into inline SVG fill attributes) work fine with
+// var(...) strings, same as everywhere else in this codebase.
 export const TIER: Record<Enriched, { color: string; glyph: string; word: string }> = {
-  brilliant: { color: '#26c2a3', glyph: '!!', word: 'Brilliant' },
-  great: { color: '#5c8bb0', glyph: '!', word: 'Great move' },
-  best: { color: '#81b64c', glyph: '★', word: 'Best move' },
-  excellent: { color: '#96bc4b', glyph: '✓', word: 'Excellent' },
-  good: { color: '#95af8a', glyph: '✓', word: 'Good' },
-  book: { color: '#a88865', glyph: '📖', word: 'Book move' },
-  inaccuracy: { color: '#f7c631', glyph: '?!', word: 'Inaccuracy' },
-  mistake: { color: '#ffa459', glyph: '?', word: 'Mistake' },
-  miss: { color: '#ff7769', glyph: '✗', word: 'Miss' },
-  blunder: { color: '#fa412d', glyph: '??', word: 'Blunder' },
+  brilliant: { color: 'var(--cls-brilliant)', glyph: '!!', word: 'Brilliant' },
+  great: { color: 'var(--cls-great)', glyph: '!', word: 'Great move' },
+  best: { color: 'var(--cls-best)', glyph: '★', word: 'Best move' },
+  excellent: { color: 'var(--cls-excellent)', glyph: '✓', word: 'Excellent' },
+  good: { color: 'var(--cls-good)', glyph: '✓', word: 'Good' },
+  book: { color: 'var(--cls-book)', glyph: '📖', word: 'Book move' },
+  inaccuracy: { color: 'var(--cls-inaccuracy)', glyph: '?!', word: 'Inaccuracy' },
+  mistake: { color: 'var(--cls-mistake)', glyph: '?', word: 'Mistake' },
+  miss: { color: 'var(--cls-miss)', glyph: '✗', word: 'Miss' },
+  blunder: { color: 'var(--cls-blunder)', glyph: '??', word: 'Blunder' },
   none: { color: 'transparent', glyph: '', word: '' },
 }
 
@@ -21,13 +25,27 @@ export const TIER: Record<Enriched, { color: string; glyph: string; word: string
 // jump target for key-moment stepping. Shared so all three stay in sync.
 export const KEY_TIERS = new Set<Enriched>(['brilliant', 'great', 'miss', 'inaccuracy', 'mistake', 'blunder'])
 
+// A3: the board's square-tint overlay used to be built by string-appending a
+// hex alpha suffix ("66") straight onto TIER[t].color — that only works when
+// color is a literal hex, and it's now a var(--cls-*) reference. color-mix
+// is the token-safe equivalent; 40% ≈ the old 0x66/255 alpha.
+export function tierTint(kind: Enriched): string {
+  return `color-mix(in srgb, ${TIER[kind].color} 40%, transparent)`
+}
+
 // A small colored circle with a white glyph, used anywhere a tier needs a
 // compact badge: the board corner badge, move-list chips, the coach card.
 export function TierIcon({ kind, size = 18 }: { kind: Enriched; size?: number }) {
   if (kind === 'none') return null
   const t = TIER[kind]
   return (
+    // J1: role="img" + aria-label names the tier for screen readers (title
+    // alone is not exposed reliably); glyph is near-black — it reads better
+    // across the whole --cls-* range than white did (several of those tiers
+    // are light/mid-tone, not just the dark reds).
     <span
+      role="img"
+      aria-label={t.word}
       title={t.word}
       style={{
         display: 'inline-flex',
@@ -38,7 +56,7 @@ export function TierIcon({ kind, size = 18 }: { kind: Enriched; size?: number })
         height: size,
         borderRadius: '50%',
         background: t.color,
-        color: '#fff',
+        color: '#0b0c10',
         fontWeight: 700,
         fontSize: size * 0.6,
         lineHeight: 1,
@@ -46,37 +64,5 @@ export function TierIcon({ kind, size = 18 }: { kind: Enriched; size?: number })
     >
       {t.glyph}
     </span>
-  )
-}
-
-// A small SVG donut arc showing a 0-100 accuracy number: chess.com-style
-// accuracy gauge, pure presentation (no d3, plain stroke-dasharray). Arc
-// length is the percentage; color reads the same rough bands as the tier
-// colors (green/yellow/red) without depending on Enriched.
-export function AccuracyRing({ pct, size = 44 }: { pct: number; size?: number }) {
-  const stroke = 4
-  const r = (size - stroke) / 2
-  const c = 2 * Math.PI * r
-  const clamped = Math.min(100, Math.max(0, pct))
-  const dash = (clamped / 100) * c
-  const color = clamped >= 80 ? 'var(--best)' : clamped >= 60 ? 'var(--cls-inaccuracy)' : 'var(--blunder)'
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`accuracy ${clamped.toFixed(1)}%`}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={stroke}
-        strokeDasharray={`${dash} ${c - dash}`}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      />
-      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" className="mono" fontSize={size * 0.28} fill="var(--bone)">
-        {clamped.toFixed(0)}
-      </text>
-    </svg>
   )
 }

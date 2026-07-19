@@ -13,7 +13,7 @@ import { Engine } from '../src/uci.js'
 
 const SCRIPTED = fileURLToPath(new URL('../../../fixtures/fake-engines/scripted.mjs', import.meta.url))
 const fixture = (name: string) =>
-  readFileSync(new URL(`../../../fixtures/pgn/${name}`, import.meta.url), 'utf8')
+  readFileSync(new URL(`../../../fixtures/fake-engines/pgn/${name}`, import.meta.url), 'utf8')
 
 let engine: Engine | null = null
 afterEach(() => {

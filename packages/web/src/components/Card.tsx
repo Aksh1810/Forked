@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { WrappedSummary } from '../lib/api'
 import { share } from '../copy'
 import { EvalCliff } from './EvalCliff'
+import { ElectricBorder } from './bits/ElectricBorder'
 
 // The shareable card, rendered to match the OG image exactly: void background,
 // wordmark, username, archetype and mark, accuracy, worst-blunder sparkline,
@@ -14,62 +15,64 @@ export function Card({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: strin
   const url = typeof window !== 'undefined' ? window.location.origin + `/j/${jobId}` : `/j/${jobId}`
   return (
     <div>
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 360,
-          margin: '0 auto',
-          aspectRatio: '4 / 5',
-          background: 'var(--void)',
-          border: '1px solid var(--line)',
-          borderRadius: 12,
-          padding: '28px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 14,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span className="wordmark">forked</span>
-          {wrapped.username && <span className="mono" style={{ color: 'var(--muted)' }}>@{wrapped.username}</span>}
-        </div>
-
-        <div>
-          <div style={{ color: 'var(--muted)', fontSize: 13 }}>Archetype</div>
-          <div className="display" style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.05 }}>
-            {wrapped.archetype.name} <span style={{ color: 'var(--blunder)' }}>{wrapped.archetype.mark}</span>
+      {/* B8: a line-ish grey ring, not the red default — red stays only on
+          the share .cta below. */}
+      <ElectricBorder color="#5a5560" borderRadius={12} style={{ maxWidth: 360, margin: '0 auto' }}>
+        <div
+          style={{
+            width: '100%',
+            aspectRatio: '4 / 5',
+            background: 'var(--void)',
+            border: '1px solid var(--line)',
+            borderRadius: 12,
+            padding: '28px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span className="wordmark">forked</span>
+            {wrapped.username && <span className="mono" style={{ color: 'var(--muted)' }}>@{wrapped.username}</span>}
           </div>
-          <div style={{ color: 'var(--muted)', fontSize: 14 }}>{wrapped.archetype.description}</div>
-        </div>
 
-        <div style={{ display: 'flex', gap: 20 }}>
-          <Stat label="Accuracy" value={wrapped.accuracy !== null ? wrapped.accuracy.toFixed(1) : '--'} />
-          <Stat label="Positions" value={wrapped.totalPositions.toLocaleString('en-US')} />
-        </div>
-
-        {wrapped.worstBlunder && (
           <div>
-            <div style={{ color: 'var(--muted)', fontSize: 13 }}>
-              Worst move: <span className="mono" style={{ color: 'var(--bone)' }}>{wrapped.worstBlunder.move}</span>{' '}
-              <span style={{ color: 'var(--blunder)' }}>??</span>
+            <div style={{ color: 'var(--muted)', fontSize: 13 }}>Archetype</div>
+            <div className="display" style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.05 }}>
+              {wrapped.archetype.name} <span style={{ color: 'var(--blunder)' }}>{wrapped.archetype.mark}</span>
             </div>
-            <EvalCliff series={wrapped.worstBlunder.cliff} width={300} height={56} />
+            <div style={{ color: 'var(--muted)', fontSize: 14 }}>{wrapped.archetype.description}</div>
           </div>
-        )}
 
-        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-          {wrapped.poisonOpening && (
-            <Stat label="Poison opening" value={`${wrapped.poisonOpening.family} ${wrapped.poisonOpening.multiplier}x`} small />
-          )}
-          {wrapped.timePressure.dropPct !== null && (
-            <Stat label="Under 30s" value={`-${wrapped.timePressure.dropPct.toFixed(1)}%`} small />
-          )}
-        </div>
+          <div style={{ display: 'flex', gap: 20 }}>
+            <Stat label="Accuracy" value={wrapped.accuracy !== null ? wrapped.accuracy.toFixed(1) : '--'} />
+            <Stat label="Positions" value={wrapped.totalPositions.toLocaleString('en-US')} />
+          </div>
 
-        <div style={{ marginTop: 'auto', color: 'var(--muted)', fontSize: 12 }} className="mono">
-          {url.replace(/^https?:\/\//, '')}
+          {wrapped.worstBlunder && (
+            <div>
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Worst move: <span className="mono" style={{ color: 'var(--bone)' }}>{wrapped.worstBlunder.move}</span>{' '}
+                <span style={{ color: 'var(--blunder)' }}>??</span>
+              </div>
+              <EvalCliff series={wrapped.worstBlunder.cliff} width={300} height={56} />
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            {wrapped.poisonOpening && (
+              <Stat label="Poison opening" value={`${wrapped.poisonOpening.family} ${wrapped.poisonOpening.multiplier}x`} small />
+            )}
+            {wrapped.timePressure.dropPct !== null && (
+              <Stat label="Under 30s" value={`-${wrapped.timePressure.dropPct.toFixed(1)}%`} small />
+            )}
+          </div>
+
+          <div style={{ marginTop: 'auto', color: 'var(--muted)', fontSize: 12 }} className="mono">
+            {url.replace(/^https?:\/\//, '')}
+          </div>
         </div>
-      </div>
+      </ElectricBorder>
 
       <ShareRow wrapped={wrapped} jobId={jobId} url={url} />
     </div>

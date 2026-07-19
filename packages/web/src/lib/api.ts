@@ -133,14 +133,28 @@ export async function postIngest(body: {
   }
 }
 
-export async function getJob(jobId: string, failures = false): Promise<JobView | null> {
+// K7: same 'notFound' vs null distinction as getGameReport above — a plain
+// getJob() collapses a real 404 and a network hiccup into the same null,
+// which the breakdown page needs to tell apart (a genuinely bad link vs
+// "try again"). This is the one fetcher for the endpoint; getJob is a
+// convenience view over it.
+export async function getJobOrNotFound(
+  jobId: string,
+  failures = false,
+): Promise<JobView | 'notFound' | null> {
   try {
     const res = await fetch(`${API_BASE}/job/${jobId}${failures ? '?failures=1' : ''}`)
+    if (res.status === 404) return 'notFound'
     if (!res.ok) return null
     return (await res.json()) as JobView
   } catch {
     return null
   }
+}
+
+export async function getJob(jobId: string, failures = false): Promise<JobView | null> {
+  const r = await getJobOrNotFound(jobId, failures)
+  return r === 'notFound' ? null : r
 }
 
 export interface LeaderUser {

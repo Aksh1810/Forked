@@ -5,6 +5,7 @@ export default defineConfig({
     projects: [
       'packages/shared',
       'packages/worker',
+      'packages/web',
       {
         test: {
           root: 'packages/control',
