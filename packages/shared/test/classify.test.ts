@@ -19,20 +19,20 @@ function cpForWhiteWinPct(target: number): number {
   return Math.round((lo + hi) / 2)
 }
 
-// [wpBefore, wpAfter, expected, note] — chess.com-calibrated bands: inaccuracy
-// >=4, mistake >=7.5, blunder >=25 (the 7.5 mistake threshold reproduces a
-// real chess.com Game Review's mistake/miss counts exactly on the reference
-// game). No decided-position suppression: a loss in a decided position
-// classifies the same as anywhere else, matching chess.com's Game Review.
+// [wpBefore, wpAfter, expected, note] — chess.com-calibrated bands (re-pinned
+// 2026-07-19 against a per-ply diff of a real chess.com Game Review):
+// inaccuracy >=5, mistake >=12, blunder >=20. No decided-position
+// suppression: a loss in a decided position classifies the same as anywhere
+// else, matching chess.com's Game Review.
 const CASES: [number, number, string, string][] = [
   [50, 15, 'blunder', 'loss of 35'],
-  [50, 24.9, 'blunder', 'loss of exactly 25.1 (blunder edge)'],
-  [50, 25.1, 'mistake', 'loss of exactly 24.9 (just under blunder edge)'],
-  [50, 45, 'inaccuracy', 'loss of 5'],
-  [50, 42.4, 'mistake', 'loss of exactly 7.6 (mistake edge)'],
-  [50, 42.6, 'inaccuracy', 'loss of exactly 7.4 (just under mistake edge)'],
-  [50, 45.9, 'inaccuracy', 'loss of exactly 4.1 (inaccuracy edge)'],
-  [50, 46.1, 'none', 'loss of exactly 3.9 (just under inaccuracy edge)'],
+  [50, 29.9, 'blunder', 'loss of exactly 20.1 (blunder edge)'],
+  [50, 30.1, 'mistake', 'loss of exactly 19.9 (just under blunder edge)'],
+  [50, 42, 'inaccuracy', 'loss of 8'],
+  [50, 37.9, 'mistake', 'loss of exactly 12.1 (mistake edge)'],
+  [50, 38.1, 'inaccuracy', 'loss of exactly 11.9 (just under mistake edge)'],
+  [50, 44.9, 'inaccuracy', 'loss of exactly 5.1 (inaccuracy edge)'],
+  [50, 45.1, 'none', 'loss of exactly 4.9 (just under inaccuracy edge)'],
   [50, 70, 'none', 'gaining is never classified'],
   // Decided positions are no longer suppressed: these used to read 'none',
   // but the calibrated bands count every position the same way.
@@ -40,8 +40,8 @@ const CASES: [number, number, string, string][] = [
   [91, 61, 'blunder', 'decided position (91 before), loss of 30 now classifies as blunder'],
   [95, 35, 'blunder', 'big loss (60) classifies as blunder regardless of starting position'],
   [100, 30, 'blunder', 'mate for the mover thrown away to losing, loss of 70'],
-  [60, 40, 'mistake', 'loss of 20'],
-  [9, 0, 'mistake', 'already-losing position (9 before) now classifies too, loss of 9'],
+  [60, 45, 'mistake', 'loss of 15'],
+  [9, 0, 'inaccuracy', 'already-losing position (9 before) now classifies too, loss of 9'],
   [100, 95, 'inaccuracy', 'mate to still winning: loss of 5 now classifies'],
   [0, 0, 'none', 'dead lost throughout, no loss'],
 ]
@@ -102,11 +102,11 @@ test('a small non-best loss under 2 win-pts is excellent', () => {
   expect(enrichClassifications(record)).toEqual(['excellent'])
 })
 
-test('a non-best loss between 2 and 4 win-pts is good', () => {
+test('a non-best loss between 2 and 5 win-pts is good', () => {
   const record = mkRecord(
     ['e2e4'],
     cp(0),
-    // wp(-30) = 47.2412 -> loss 2.7588, squarely inside [2, 4)
+    // wp(-30) = 47.2412 -> loss 2.7588, squarely inside [2, 5)
     [ply({ ply: 1, played: 'e2e4', best: 'd2d4', evalAfter: cp(-30) })],
   )
   expect(enrichClassifications(record)).toEqual(['good'])
@@ -116,12 +116,12 @@ test('a non-best loss between 2 and 4 win-pts is good', () => {
 // the stored p.classification. That field is only ever a stale snapshot from
 // whatever band thresholds were live at analysis time.
 
-test('a genuine 4+ win-pt loss is classified as inaccuracy purely from the swing, even with no stored classification', () => {
+test('a genuine 5+ win-pt loss is classified as inaccuracy purely from the swing, even with no stored classification', () => {
   const record = mkRecord(
     ['e2e4'],
     cp(0),
     // startEval 50%, evalAfter targets white 44% -> actual wp 44.0450,
-    // loss 5.9550, squarely inside [4, 7.5).
+    // loss 5.9550, squarely inside [5, 12).
     [ply({ ply: 1, played: 'e2e4', best: 'd2d4', evalAfter: cp(cpForWhiteWinPct(44)) })],
   )
   expect(enrichClassifications(record)).toEqual(['inaccuracy'])
@@ -141,7 +141,7 @@ test('a stale stored classification is ignored: a genuinely tiny loss reads as e
   expect(enrichClassifications(record)).toEqual(['excellent'])
 })
 
-test('a stored bad tier is relabeled miss when the opponent just blundered >=7.5 and the mover was still >=70', () => {
+test('a stored bad tier is relabeled miss when the opponent just blundered >=12 and the mover was still >=70', () => {
   const record = mkRecord(
     ['e2e4', 'e7e5', 'g1f3'],
     cp(0),
@@ -156,7 +156,7 @@ test('a stored bad tier is relabeled miss when the opponent just blundered >=7.5
   expect(enrichClassifications(record)[2]).toBe('miss')
 })
 
-test('the best move after the opponent blundered >=20 is great', () => {
+test('the best move after the opponent blundered >=12 is great', () => {
   const record = mkRecord(
     ITALIAN.slice(0, 5),
     cp(0),
@@ -168,6 +168,23 @@ test('the best move after the opponent blundered >=20 is great', () => {
       ply({ ply: 4, played: 'b8c6', evalAfter: cp(400) }),
       // white finds the best move punishing it; no sacrifice pattern (pv has no reply)
       ply({ ply: 5, played: 'f1c4', best: 'f1c4', pv: ['f1c4'], evalAfter: cp(450) }),
+    ],
+  )
+  expect(enrichClassifications(record)[4]).toBe('great')
+})
+
+test('the best move after the opponent made a mere mistake (12-20 loss, not a blunder) is also great', () => {
+  const record = mkRecord(
+    ITALIAN.slice(0, 5),
+    cp(0),
+    [
+      ply({ ply: 1, played: 'e2e4' }),
+      ply({ ply: 2, played: 'e7e5' }),
+      ply({ ply: 3, played: 'g1f3' }),
+      // black's move loses 15 win-pts (50 -> 35): mistake-band, not blunder-band.
+      ply({ ply: 4, played: 'b8c6', evalAfter: cp(cpForWhiteWinPct(65)) }),
+      // white finds the best move punishing it; no sacrifice pattern (pv has no reply)
+      ply({ ply: 5, played: 'f1c4', best: 'f1c4', pv: ['f1c4'], evalAfter: cp(cpForWhiteWinPct(65)) }),
     ],
   )
   expect(enrichClassifications(record)[4]).toBe('great')
@@ -318,10 +335,10 @@ test('the blunder gate does not touch a relabeled miss', () => {
       // black's reply loses 35 win-pts (50 -> 15), handing white a big edge.
       ply({ ply: 2, played: 'e7e5', evalAfter: cp(cpForWhiteWinPct(85)) }),
       // white's own move throws away 30 win-pts here (85 -> 55) — on its
-      // own that's blunder-band (>=25) and inside the gate's downgrade
+      // own that's blunder-band (>=20) and inside the gate's downgrade
       // range (loss<40, wpAfter>15), so IF this ply reached the gate as a
       // plain 'blunder' it would be downgraded to 'mistake'. But
-      // prevLoss>=7.5 and wpBefore>=70 fire the miss-relabel branch first,
+      // prevLoss>=12 and wpBefore>=70 fire the miss-relabel branch first,
       // which wins the tier before the gate ever runs.
       ply({ ply: 3, played: 'g1f3', best: 'd2d4', evalAfter: cp(cpForWhiteWinPct(55)) }),
     ],
@@ -424,14 +441,14 @@ test('classifyLive: playedBest wins regardless of swing', () => {
 test('classifyLive: tiny loss is excellent, small loss is good', () => {
   // white 54.95 -> 54.04: loss 0.91, under 2
   expect(classifyLive({ type: 'cp', value: 54 }, { type: 'cp', value: 44 }, 'white', false)).toBe('excellent')
-  // white 54.95 -> 51.84: loss 3.11, between 2 and 4
+  // white 54.95 -> 51.84: loss 3.11, between 2 and 5
   expect(classifyLive({ type: 'cp', value: 54 }, { type: 'cp', value: 20 }, 'white', false)).toBe('good')
 })
 
 test('classifyLive: loss bands map to inaccuracy/mistake', () => {
-  // white 50.00 -> 43.59: loss 6.41, in the [4,7.5) inaccuracy band
+  // white 50.00 -> 43.59: loss 6.41, in the [5,12) inaccuracy band
   expect(classifyLive({ type: 'cp', value: 0 }, { type: 'cp', value: -70 }, 'white', false)).toBe('inaccuracy')
-  // white 50.00 -> 32.38: loss 17.62, in the [7.5,25) mistake band
+  // white 50.00 -> 32.38: loss 17.62, in the [12,20) mistake band
   expect(classifyLive({ type: 'cp', value: 0 }, { type: 'cp', value: -200 }, 'white', false)).toBe('mistake')
 })
 
@@ -446,6 +463,6 @@ test('classifyLive: non-catastrophic 30-40pt swing downgrades to mistake (blunde
 
 test('classifyLive: black perspective (white-perspective evals negated for the mover)', () => {
   // black mover: cp -54 is 54.95% for black; dropping to cp -20 (51.84% for
-  // black) is a loss of 3.11, between 2 and 4
+  // black) is a loss of 3.11, between 2 and 5
   expect(classifyLive({ type: 'cp', value: -54 }, { type: 'cp', value: -20 }, 'black', false)).toBe('good')
 })

@@ -77,26 +77,30 @@ const record: EngineRecord = {
   ],
 }
 
-// Re-pinned for the chess.com-calibrated bands (inaccuracy>=4/mistake>=7.5/
-// blunder>=25, excellent<2/good<4) with decided-position suppression
-// deleted entirely. Recomputed with an independent scratch reimplementation
-// of classifyWinPctSwing/enrichClassifications (not by running this suite
-// and copying its output). The notable change from the pre-calibration pins
-// is ply 8: it used to read 'great' because wpBefore rounded to 90.009%,
-// just over the old decided-position cutoff of 90, so classifyWinPctSwing
-// suppressed to 'none' and the played-best/prevLoss>=20 'great' path won by
-// default. With suppression deleted, ply 8's loss (10.0381, wpBefore 90.009
-// -> wpAfter 79.971) is a plain 'mistake' swing, and prevLoss (ply 7's
-// 42.033-pt blunder) >=7.5 with wpBefore>=70 fires the miss-relabel branch
-// first, so ply 8 now reads 'miss' instead of 'great' — the swing branch is
-// checked before the played-best branch, so removing suppression changes
-// which branch gets there first, not just the swing's own threshold.
+// Re-pinned 2026-07-19 for the tier-band parity spec (bands changed BY
+// DESIGN, calibrated against a per-ply diff of a real chess.com Game Review:
+// inaccuracy>=5/mistake>=12/blunder>=20, excellent<2/good<5). Recomputed with
+// an independent scratch reimplementation of classifyWinPctSwing/
+// enrichClassifications (not by running this suite and copying its output).
+// Two plies change from the previous (2026-07-1x) pin:
+//  - ply 8 (Bxb4): loss is 10.0381 (wpBefore 90.009 -> wpAfter 79.971). Under
+//    the old mistake floor (7.5) this was a 'mistake' swing that the
+//    prevLoss>=7.5 miss-relabel branch caught, reading 'miss'. The new
+//    mistake floor (12) puts 10.0381 below it, in the inaccuracy band
+//    (>=5,<12) instead — the swing is 'inaccuracy', which the miss-relabel
+//    branch never touches (it only relabels mistake/blunder swings), so ply
+//    8 now reads 'inaccuracy' directly.
+//  - ply 10 (Ba5): loss is 4.9834. Under the old inaccuracy floor (4) this
+//    was an 'inaccuracy' swing. The new inaccuracy floor (5) puts 4.9834
+//    below it, so the swing is 'none' and the ply falls through to the
+//    excellent/good check on raw loss: 4.9834 is under the new GOOD_MAX (5),
+//    so it now reads 'good'.
 test('golden record: enrichClassifications output is pinned', () => {
   expect(enrichClassifications(record)).toEqual([
     'book', 'book', 'book', 'book',
     'best', 'best',
-    'blunder', 'miss',
-    'best', 'inaccuracy',
+    'blunder', 'inaccuracy',
+    'best', 'good',
     'best', 'excellent',
   ])
 })

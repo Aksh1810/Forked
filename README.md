@@ -1,22 +1,28 @@
 # forked
 
-Distributed chess analysis. Enter a chess.com username, a pool of Stockfish
-workers analyzes your entire archive at full, consistent engine depth, and you
-get a Wrapped-style story, a shareable card, and archive-level insights no
-per-game tool gives: blunder rate by opening, by game phase, by time pressure,
-accuracy trends over time, and a computed archetype.
+Distributed chess analysis. Enter a chess.com username and you get two things:
+every game you have ever played, listed instantly, any one of which a
+server-side Stockfish analyzes into a full move-by-move review; and, from the
+whole archive at once, a Wrapped-style story, a shareable card, and
+archive-level insights no per-game tool gives: blunder rate by opening, by
+game phase, by time pressure, accuracy trends over time, and a computed
+archetype.
 
-Per-game analysis is a solved, free problem. forked is about the archive:
-server-side, fanned out across a worker pool, the same engine depth whether
-you open it from a workstation or a phone, incremental re-syncs served from a
-content-addressed cache, and the whole thing open source and self-hostable.
+The review board is the everyday surface: classified moves, coach commentary,
+an eval graph, and a second Stockfish running in your browser so you can grab
+a piece and explore any variation with live evaluation. The archive is the
+part nothing else does: server-side, fanned out across a worker pool, the same
+engine depth whether you open it from a workstation or a phone, incremental
+re-syncs served from a content-addressed cache, and the whole thing open
+source and self-hostable.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   subgraph web [Next.js web]
-    L[landing] --> P[progress] --> S[story / card / dashboard]
+    L[landing] --> G[games list] --> R[review board + in-browser engine]
+    L --> P[progress] --> S[story / card / dashboard]
   end
   subgraph control [control plane, one Lambda behind one Function URL]
     I[ingest]
@@ -84,6 +90,18 @@ cache hits that never touch a queue. Engine records structurally cannot leak
 between users: the schema has no clock, name, or game-id field, and a test
 enforces that at the type level.
 
+**Two engines, two jobs.** The server engine is the source of truth: fixed
+node budget, deterministic, cached. The review board also boots a
+single-threaded Stockfish wasm build in the browser, which does the thing the
+cached record cannot — evaluate positions that were never played. Pick up a
+piece anywhere in the game and the branch you create is evaluated live at
+MultiPV 3, with the same classification badges the mainline gets. The stored
+per-ply classification is a deliberately coarse four-value enum
+(`blunder | mistake | inaccuracy | none`) that feeds insights and the
+leaderboard; the finer display tiers you actually see are derived at render
+time from the same record, so re-tuning the bands re-labels every
+already-analyzed game without re-running a single engine.
+
 **Two fleets, one budget.** Short games route to a Lambda container fleet
 (SQS event source, max concurrency 5); long games and everything past a
 monthly GB-seconds budget route to plain container workers you can run on any
@@ -147,7 +165,8 @@ provided for machines without it).
 
 ```
 npm ci              # install
-npm test            # vitest across all packages (shared, worker, control)
+npx tsc -b          # build to dist/ (the api and worker run from it)
+npm test            # vitest across all packages (shared, worker, control, web)
 npm run lint
 npm run typecheck
 npm run synth       # cdk synth of the control stack, Docker-free
@@ -158,6 +177,10 @@ npm run api -w packages/control         # control API :8787
 node packages/worker/dist/main.js       # a worker (repeat for more)
 npm run dev -w packages/web             # web :3000
 ```
+
+Workers need a Stockfish binary on `PATH` or at `STOCKFISH_PATH`, matching the
+pinned version in `packages/shared/src/config.ts` — analysis is deterministic
+per engine version, so a mismatch silently changes every cache key.
 
 `docker compose up` brings up the same stack containerized. The kill tests
 and phase gates live in `scripts/local/` and are all repeatable scripts, not
@@ -170,11 +193,20 @@ Self-hosting: see `docs/self-hosting.md`. Cloud deploy runbook:
 ## License
 
 This repository's code is MIT licensed. The Stockfish chess engine is GPLv3,
-developed by the Stockfish community, and runs strictly as a separate
-process; it is never linked into this code and never vendored into this
-repository. The worker images download the pinned official release at build
-time and carry attribution. See `docs/NOTICE` and
-https://github.com/official-stockfish/Stockfish.
+developed by the Stockfish community. It is never linked into this code and
+never vendored into this repository, and it runs in two places, both at
+arm's length:
+
+- **Server side**, as a separate process. The worker images download the
+  pinned official release at build time and carry attribution.
+- **Browser side**, as the `stockfish` npm package's single-threaded wasm
+  build, running in a Web Worker. It is copied out of `node_modules` into
+  `packages/web/public/engine/` by a build script (that path is gitignored,
+  so the binary is never committed here), along with its `Copying.txt`, which
+  the app links from `/about` alongside engine attribution.
+
+See `docs/NOTICE`, https://github.com/official-stockfish/Stockfish, and
+https://github.com/nmrugg/stockfish.js.
 
 The board piece set is the cburnett set by Colin M.L. Burnett, tri-licensed
 GPLv2+/BSD/GFDL, vendored (inlined as JSX) from

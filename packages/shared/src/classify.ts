@@ -5,16 +5,26 @@ import type { Classification, Eval, EngineRecord } from './schemas.js'
 import { moverWinPct } from './win.js'
 
 // Classification is based on the mover's win-probability swing, in percentage
-// points: a loss of 25 or more is a blunder, 7.5 or more a mistake, 4 or more
-// an inaccuracy. Bands calibrated against a real chess.com Game Review (the
-// 7.5 mistake threshold reproduces its mistake/miss counts exactly on the
-// reference game). No decided-position suppression: the calibrated bands
-// count decided-position errors the same way chess.com's Game Review does.
+// points: a loss of BLUNDER_LOSS or more is a blunder, MISTAKE_LOSS or more a
+// mistake, INACCURACY_LOSS or more an inaccuracy; below that, EXCELLENT_MAX/
+// GOOD_MAX split the remainder into excellent/good/none. Bands calibrated
+// 2026-07-19 against a per-ply diff of a real chess.com Game Review
+// (live/171164529380): cc mistakes on that game are losses >=16, cc
+// inaccuracies land in forked's old 7.9-10.5 mistake range, cc good reaches
+// ~5, cc blunder floor is ~20. No decided-position suppression: the
+// calibrated bands count decided-position errors the same way chess.com's
+// Game Review does.
+export const EXCELLENT_MAX = 2
+export const GOOD_MAX = 5
+export const INACCURACY_LOSS = 5
+export const MISTAKE_LOSS = 12
+export const BLUNDER_LOSS = 20
+
 export function classifyWinPctSwing(wpBefore: number, wpAfter: number): Classification {
   const loss = wpBefore - wpAfter
-  if (loss >= 25) return 'blunder'
-  if (loss >= 7.5) return 'mistake'
-  if (loss >= 4) return 'inaccuracy'
+  if (loss >= BLUNDER_LOSS) return 'blunder'
+  if (loss >= MISTAKE_LOSS) return 'mistake'
+  if (loss >= INACCURACY_LOSS) return 'inaccuracy'
   return 'none'
 }
 
@@ -38,8 +48,8 @@ export function classifyLive(
     return 'mistake'
   }
   if (base !== 'none') return base
-  if (loss < 2) return 'excellent'
-  if (loss < 4) return 'good'
+  if (loss < EXCELLENT_MAX) return 'excellent'
+  if (loss < GOOD_MAX) return 'good'
   return 'none'
 }
 
@@ -133,13 +143,16 @@ export function enrichClassifications(record: EngineRecord): Enriched[] {
     if (p.book) {
       tier = 'book'
     } else if (swing !== 'none') {
-      // Relabel: the opponent just handed the mover a big edge (>=7.5 win-pts)
-      // and the mover was still comfortably ahead (>=70) going into this
-      // move — a miss, not just a mistake/blunder. Inaccuracy-grade swings
-      // stay inaccuracies: relabeling them too inflated the bad-move count to
-      // 8 where chess.com's Game Review of the same game showed 5.
+      // Relabel: the opponent just handed the mover a big edge (>=MISTAKE_LOSS
+      // win-pts, re-pinned 2026-07-19 from 7.5 against a real chess.com Game
+      // Review) and the mover was still comfortably ahead (>=70) going into
+      // this move — a miss, not just a mistake/blunder. Inaccuracy-grade
+      // swings stay inaccuracies: relabeling them too inflated the bad-move
+      // count past what chess.com's Game Review of the same game showed.
       tier =
-        (swing === 'mistake' || swing === 'blunder') && prevLoss >= 7.5 && wpBefore >= 70 ? 'miss' : swing
+        (swing === 'mistake' || swing === 'blunder') && prevLoss >= MISTAKE_LOSS && wpBefore >= 70
+          ? 'miss'
+          : swing
       // Blunder gate (chess.com classification-v2 style): a 'blunder' keeps
       // that display tier only when it's catastrophic — otherwise it reads
       // as a plain mistake. ponytail: win%-swing + terminal signals only,
@@ -160,11 +173,11 @@ export function enrichClassifications(record: EngineRecord): Enriched[] {
         p.pv[1].slice(2, 4) === p.played.slice(2, 4) &&
         movedValue > capturedValue
       if (sac && wpBefore < 95 && wpAfter >= 40) tier = 'brilliant'
-      else if (prevLoss >= 20) tier = 'great' // found the punish for the opponent's previous blunder
+      else if (prevLoss >= MISTAKE_LOSS) tier = 'great' // punished the opponent's previous mistake/blunder
       else tier = 'best'
-    } else if (loss < 2) {
+    } else if (loss < EXCELLENT_MAX) {
       tier = 'excellent'
-    } else if (loss < 4) {
+    } else if (loss < GOOD_MAX) {
       tier = 'good'
     } else {
       tier = 'none'

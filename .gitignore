@@ -1,14 +1,36 @@
+# Build output
 node_modules/
 dist/
 .next/
-packages/web/public/engine/
-cdk.out/
 *.tsbuildinfo
 coverage/
+
+# Stockfish wasm, copied from node_modules by the web predev/prebuild script
+packages/web/public/engine/
+
+# CDK
+cdk.out/
+.cdk.staging/
+
+# Secrets and local config. .env.example stays tracked if one is ever added.
 .env
 .env.*
+!.env.example
+
+# Editors and OS
 .DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+
+# Agent tooling scratch
 .claude/settings.local.json
+.superpowers/
+CLAUDE.md
 
 # Private ops log (account details, deploy-day evidence); the rest of docs/
 # is published and linked from the README.
@@ -16,4 +38,3 @@ docs/migration-plan.md
 
 # DynamoDB Local (jvm-stack) artifact
 dynamodb-local-metadata.json
-CLAUDE.md
