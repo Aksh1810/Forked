@@ -21,13 +21,19 @@ export function moveAccuracyPct(lossPct: number): number {
   return Math.min(100, Math.max(0, a))
 }
 
+const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
+
+// Calibration tunables for gameAccuracies (fit jointly with the curve above).
+const BEST_RATE_WEIGHT = 0.15 // blend weight of the best-move rate vs mean move accuracy
+const STRETCH_BELOW = 62 // scores under this get stretched toward 0 …
+const STRETCH_FACTOR = 0.5 // … by this much per point of shortfall
+
 export function gameAccuracies(
   record: Pick<EngineRecord, 'startEval' | 'plies'>,
   terminal: 'checkmate' | 'stalemate' | null,
 ): { white: number | null; black: number | null } {
   const accs = { white: [] as number[], black: [] as number[] }
-  const nonBook = { white: 0, black: 0 }
-  const nonBookBest = { white: 0, black: 0 }
+  const nonBook = { white: { total: 0, best: 0 }, black: { total: 0, best: 0 } }
   let before: Eval = record.startEval
   for (const p of record.plies) {
     const mover = p.ply % 2 === 1 ? 'white' : 'black'
@@ -43,18 +49,18 @@ export function gameAccuracies(
     // whose pseudo-loss would otherwise pollute the mean.
     accs[mover].push(p.book ? 100 : moveAccuracyPct(Math.max(0, wpBefore - wpAfter)))
     if (!p.book) {
-      nonBook[mover]++
-      if (p.played === p.best) nonBookBest[mover]++
+      nonBook[mover].total++
+      if (p.played === p.best) nonBook[mover].best++
     }
     if (p.evalAfter !== null) before = p.evalAfter
   }
-  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
   const blend = (color: 'white' | 'black') => {
     const meanAcc = mean(accs[color])
     if (meanAcc === null) return null
-    const bestPct = nonBook[color] ? (100 * nonBookBest[color]) / nonBook[color] : null
-    let raw = bestPct === null ? meanAcc : 0.15 * bestPct + 0.85 * meanAcc
-    if (raw < 62) raw = raw - (62 - raw) * 0.5
+    const { total, best } = nonBook[color]
+    const bestPct = total ? (100 * best) / total : null
+    let raw = bestPct === null ? meanAcc : BEST_RATE_WEIGHT * bestPct + (1 - BEST_RATE_WEIGHT) * meanAcc
+    if (raw < STRETCH_BELOW) raw = raw - (STRETCH_BELOW - raw) * STRETCH_FACTOR
     return Math.min(100, Math.max(0, raw))
   }
   return { white: blend('white'), black: blend('black') }
@@ -96,7 +102,6 @@ export function phaseAccuracies(
     if (p.evalAfter !== null) before = p.evalAfter
   }
 
-  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
   const out = {} as Record<GamePhase, { white: number | null; black: number | null }>
   for (const phase of GAME_PHASES) out[phase] = { white: mean(accs[phase].white), black: mean(accs[phase].black) }
   return out
