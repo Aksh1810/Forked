@@ -28,10 +28,9 @@ function cpForWhiteWinPct(target: number): number {
 const wp = (target: number) => winPctFromCp(cpForWhiteWinPct(target))
 
 test('move accuracy curve endpoints and monotonicity', () => {
-  // 158*exp(0) - 58 = 100 exactly (unlike the old WintrChess constants,
-  // which landed at 99.99). The new curve is much steeper: it clamps to 0
-  // once loss exceeds ln(58/158)/-0.11 =~ 9.11 win-pts, so most of the
-  // 0..100 domain below is a flat 0.
+  // 180*exp(0) - 80 = 100 exactly (unlike the old WintrChess constants,
+  // which landed at 99.99). The curve clamps to 0 once loss exceeds
+  // ln(80/180)/-0.05 =~ 16.22 win-pts.
   expect(moveAccuracyPct(0)).toBe(100)
   expect(moveAccuracyPct(100)).toBe(0)
   // non-increasing throughout (strictly decreasing until the clamp, flat
@@ -67,8 +66,9 @@ test('game accuracy splits by mover, and book plies count as full credit', () =>
   }
   const { white, black } = gameAccuracies(record, null)
   expect(white).toBe(100)
-  // black's loss (50 -> 18.6513, a ~31.35 win-pt hang) is well past the new
-  // curve's ~9.11 clamp point, so it scores a flat 0, not a partial credit.
+  // black's loss (50 -> 18.6513, a ~31.35 win-pt hang) is well past the
+  // curve's ~16.22 clamp point, so its move accuracy is 0; the blend with
+  // bestPct (100, since played === best) still stretches to 0 below 62.
   expect(black).toBe(0)
 
   // A book ply scores 100 regardless of its (reduced-node-budget) eval swing
@@ -101,12 +101,16 @@ test('an all-book game scores exactly 100 for both players', () => {
 //   ply1 (white): wpBefore 50, wpAfter 40.0105  -> loss  9.9895
 //   ply2 (black): wpBefore 59.9895 (100-40.0105), wpAfter 40.0105 (100-59.9895) -> loss 19.9791
 //   ply3 (white): wpBefore 59.9895, wpAfter 54.9545 -> loss 5.0350
-// moveAccuracyPct(x) = clamp(158*exp(-0.11x) - 58, 0, 100), clamp point ~9.11:
-//   f(9.9895)  = clamp(158*exp(-1.09885) - 58) = clamp(-5.3456) = 0
-//   f(19.9791) = clamp(158*exp(-2.19770) - 58) = clamp(-40.4528) = 0
-//   f(5.0350)  = clamp(158*exp(-0.55385) - 58) = 32.8078
-// white = mean(f(9.9895), f(5.0350)) = mean(0, 32.8078) = 16.4039
-// black = f(19.9791) = 0 (only one black move, well past the clamp point)
+// moveAccuracyPct(x) = clamp(180*exp(-0.05x) - 80, 0, 100), clamp point ~16.22:
+//   f(9.9895)  = 180*exp(-0.499475) - 80 = 29.2330
+//   f(19.9791) = clamp(180*exp(-0.998955) - 80) = clamp(-13.71) = 0
+//   f(5.0350)  = 180*exp(-0.25175) - 80 = 59.9392
+// White meanAcc = mean(29.2330, 59.9392) = 44.5861; all 3 fixture plies use
+// the default played === best, so bestPct is 100 for both colors.
+// white raw = 0.15*100 + 0.85*44.5861 = 52.8982, stretched (raw<62):
+//   52.8982 - (62-52.8982)*0.5 = 48.3473
+// black meanAcc = f(19.9791) = 0 (only one black move, past the clamp);
+// black raw = 0.15*100 + 0.85*0 = 15, stretched: 15 - (62-15)*0.5 = -8.5 -> 0
 test('game accuracy on a hand-computed 3-ply fixture', () => {
   const w1 = wp(40)
   const w2 = wp(60)
@@ -125,7 +129,7 @@ test('game accuracy on a hand-computed 3-ply fixture', () => {
   expect(w3).toBeCloseTo(54.9545, 3)
 
   const { white, black } = gameAccuracies(record, null)
-  expect(white).toBeCloseTo(16.4039, 3)
+  expect(white).toBeCloseTo(48.3473, 2)
   expect(black).toBe(0)
 })
 
@@ -134,18 +138,18 @@ test('game accuracy on a hand-computed 3-ply fixture', () => {
 // NOTE ON DIRECTION: moveAccuracyPct is a convex decreasing function of loss,
 // so by Jensen's inequality averaging it over a spread-out (spiky) set of
 // inputs never scores below averaging it over a concentrated (flat) set with
-// the same mean. With this curve's ~9.11 clamp point the effect is stark
-// rather than subtle: flatLosses (10,10,10,10) sits just past the clamp on
-// every move, scoring 0 across the board (flatAcc = 0); spikyLosses
-// (0,0,0,40) scores 100 on three moves and 0 on the one big loss
-// (spikyAcc = 75). Same average loss (10), very different mean accuracy.
+// the same mean. flatLosses (10,10,10,10) sits before the ~16.22 clamp point
+// on every move, so each move scores 180*exp(-0.5)-80 = 29.1755
+// (flatAcc = 29.1755); spikyLosses (0,0,0,40) scores 100 on three moves and 0
+// on the one big loss, past the clamp (spikyAcc = 75). Same average loss
+// (10), very different mean accuracy.
 test('spiky and flat games with the same average loss: spiky scores at least as high, never lower', () => {
   const flatLosses = [10, 10, 10, 10]
   const spikyLosses = [0, 0, 0, 40] // same average (10), all the loss in one move
   const meanAcc = (losses: number[]) => losses.reduce((s, l) => s + moveAccuracyPct(l), 0) / losses.length
   const flatAcc = meanAcc(flatLosses)
   const spikyAcc = meanAcc(spikyLosses)
-  expect(flatAcc).toBe(0)
+  expect(flatAcc).toBeCloseTo(29.1755, 3)
   expect(spikyAcc).toBe(75)
   expect(spikyAcc).toBeGreaterThan(flatAcc)
 })

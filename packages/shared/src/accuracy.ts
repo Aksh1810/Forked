@@ -3,19 +3,21 @@ import { GAME_PHASES, gamePhases, type GamePhase } from './phases.js'
 import { moverWinPct } from './win.js'
 
 // Curve constants are an empirical fit against chess.com's own published
-// per-game accuracies (chess.com public API `accuracies` field), 5 games x 2
-// colors = 10 data points, July 2026, rmse 5.75 — NOT the lichess/wintrchess
-// curve. Anchor game: Apertito-vs-Akshx999, chess.com accuracies 64.68/56.97.
-// Applied PER MOVE, then game accuracy is the plain arithmetic mean of move
-// accuracies — never the curve applied to the average loss. Averaging loss
-// first and curving once (the old accuracyFromAvgLoss shortcut) is wrong by
-// Jensen's inequality: the curve is convex over the relevant range, so a
-// spiky game (many perfect moves + a couple of disasters) scores HIGHER on
-// the averaged-loss path than the honest per-move mean, even at the same
-// average loss.
+// per-game accuracies (chess.com public API `accuracies` field), 62 games x 2
+// colors = 124 data points, July 2026, rmse 6.2 — NOT the lichess/wintrchess
+// curve. Applied PER MOVE, then game accuracy is a blend of the plain
+// arithmetic mean of move accuracies (85%) and the per-color best-move rate
+// (15%) — see gameAccuracies — never the curve applied to the average loss.
+// Averaging loss first and curving once (the old accuracyFromAvgLoss
+// shortcut) is wrong by Jensen's inequality: the curve is convex over the
+// relevant range, so a spiky game (many perfect moves + a couple of
+// disasters) scores HIGHER on the averaged-loss path than the honest
+// per-move mean, even at the same average loss. Scores below 62 get an
+// additional stretch toward 0 (also in gameAccuracies) to match chess.com's
+// low-end spread.
 // ponytail: refit when more reviewed games accumulate.
 export function moveAccuracyPct(lossPct: number): number {
-  const a = 158 * Math.exp(-0.11 * lossPct) - 58
+  const a = 180 * Math.exp(-0.05 * lossPct) - 80
   return Math.min(100, Math.max(0, a))
 }
 
@@ -24,6 +26,8 @@ export function gameAccuracies(
   terminal: 'checkmate' | 'stalemate' | null,
 ): { white: number | null; black: number | null } {
   const accs = { white: [] as number[], black: [] as number[] }
+  const nonBook = { white: 0, black: 0 }
+  const nonBookBest = { white: 0, black: 0 }
   let before: Eval = record.startEval
   for (const p of record.plies) {
     const mover = p.ply % 2 === 1 ? 'white' : 'black'
@@ -38,10 +42,22 @@ export function gameAccuracies(
     // free) rather than being scored off their reduced-node-budget eval,
     // whose pseudo-loss would otherwise pollute the mean.
     accs[mover].push(p.book ? 100 : moveAccuracyPct(Math.max(0, wpBefore - wpAfter)))
+    if (!p.book) {
+      nonBook[mover]++
+      if (p.played === p.best) nonBookBest[mover]++
+    }
     if (p.evalAfter !== null) before = p.evalAfter
   }
   const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
-  return { white: mean(accs.white), black: mean(accs.black) }
+  const blend = (color: 'white' | 'black') => {
+    const meanAcc = mean(accs[color])
+    if (meanAcc === null) return null
+    const bestPct = nonBook[color] ? (100 * nonBookBest[color]) / nonBook[color] : null
+    let raw = bestPct === null ? meanAcc : 0.15 * bestPct + 0.85 * meanAcc
+    if (raw < 62) raw = raw - (62 - raw) * 0.5
+    return Math.min(100, Math.max(0, raw))
+  }
+  return { white: blend('white'), black: blend('black') }
 }
 
 // Same loss walk as gameAccuracies, but bucketed by game phase instead of

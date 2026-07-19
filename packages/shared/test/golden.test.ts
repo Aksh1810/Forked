@@ -105,17 +105,24 @@ test('golden record: turningPoint is pinned', () => {
   expect(turningPoint(record)).toBe(7)
 })
 
-// Re-pinned for the new curve (158*exp(-0.11x)-58, clamp point ~9.11 win-pts).
+// Re-pinned for the new curve (180*exp(-0.05x)-80, clamp point ~16.22
+// win-pts) and the gameAccuracies blend (15% best-move rate, 85% mean move
+// accuracy, with a stretch below 62 — see accuracy.ts).
 // White's 6 moves (plies 1,3,5,7,9,11): book, book, quiet gain (acc 100),
-// ply 7's own 42.033-pt blunder (well past the clamp, acc 0), quiet gain
-// (100), quiet gain (100). White accs = [100, 100, 100, 0, 100, 100] ->
-// mean 500/6 = 83.3333.
+// ply 7's own 42.033-pt blunder (past the clamp, acc 0), quiet gain (100),
+// quiet gain (100). White accs = [100, 100, 100, 0, 100, 100] -> meanAcc
+// 500/6 = 83.3333. Of the 4 non-book white plies (5,7,9,11), 3 play the
+// best move (7's stored blunder does not) -> bestPct = 75. raw = 0.15*75 +
+// 0.85*83.3333 = 82.0833, no stretch (>=62) -> white = 82.0833.
 // Black's 6 moves (plies 2,4,6,8,10,12): book, book, quiet gain (100),
-// ply 8's 10.0381-pt loss (past the clamp, acc 0), ply 10's 4.9834-pt loss
-// (158*exp(-0.11*4.9834)-58 = 33.3243), quiet gain (100). Black accs =
-// [100, 100, 100, 0, 33.3243, 100] -> mean 433.3243/6 = 72.2207.
+// ply 8's 10.0381-pt loss (180*exp(-0.05*10.0381)-80 = 28.9677), ply 10's
+// 4.9834-pt loss (180*exp(-0.05*4.9834)-80 = 60.3005), quiet gain (100).
+// Black accs = [100, 100, 100, 28.9677, 60.3005, 100] -> meanAcc
+// 489.2682/6 = 81.5447. Of the 4 non-book black plies (6,8,10,12), 2 play
+// the best move (6,8 do; 10,12 don't) -> bestPct = 50. raw = 0.15*50 +
+// 0.85*81.5447 = 76.8130, no stretch -> black = 76.8130.
 test('golden record: gameAccuracies is pinned', () => {
   const acc = gameAccuracies(record, null)
-  expect(acc.white).toBeCloseTo(83.3333, 3)
-  expect(acc.black).toBeCloseTo(72.2207, 3)
+  expect(acc.white).toBeCloseTo(82.0833, 2)
+  expect(acc.black).toBeCloseTo(76.8130, 2)
 })

@@ -4,7 +4,7 @@ import { finalStatus, parseGamePgn, sanMoves } from '../src/pgn.js'
 import { cacheKey } from '../src/cache-key.js'
 
 const fixture = (name: string) =>
-  readFileSync(new URL(`../../../fixtures/pgn/${name}`, import.meta.url), 'utf8')
+  readFileSync(new URL(`../../../fixtures/fake-engines/pgn/${name}`, import.meta.url), 'utf8')
 
 test('scholars mate parses: moves, headers, terminal checkmate', () => {
   const g = parseGamePgn(fixture('scholars-mate.pgn'))
