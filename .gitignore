@@ -16,3 +16,8 @@ docs/migration-plan.md
 # DynamoDB Local (jvm-stack) artifact
 dynamodb-local-metadata.json
 CLAUDE.md
+# Stockfish engine binaries (downloaded at build time, never vendored)
+Copying.txt
+stockfish-18-lite*.js
+stockfish*.wasm
+*.wasm
