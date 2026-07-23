@@ -7,8 +7,9 @@ import { moverWinPct } from './win.js'
 // Classification is based on the mover's win-probability swing, in percentage
 // points: a loss of BLUNDER_LOSS or more is a blunder, MISTAKE_LOSS or more a
 // mistake, INACCURACY_LOSS or more an inaccuracy; below that, EXCELLENT_MAX/
-// GOOD_MAX split the remainder into excellent/good/none. Bands calibrated
-// 2026-07-19 against a per-ply diff of a real chess.com Game Review
+// GOOD_MAX split the remainder into excellent/good/none. 
+// 
+// Bands calibrated on 2026-07-19 against a per-ply diff of a real chess.com Game Review
 // (live/171164529380): cc mistakes on that game are losses >=16, cc
 // inaccuracies land in forked's old 7.9-10.5 mistake range, cc good reaches
 // ~5, cc blunder floor is ~20. No decided-position suppression: the
