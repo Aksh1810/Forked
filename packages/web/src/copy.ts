@@ -99,6 +99,9 @@ export const copy = {
     back: 'Back',
     analyzeAll: 'Analyze all',
     analyze: 'Analyze',
+    // Shown in place of `analyze` once a game has already been analyzed
+    // (browse list, item 6) — click behavior is unchanged, only the label.
+    review: 'Review',
     analyzing: 'Analyzing...',
     empty: 'No games in this month.',
     none: 'No games found for this account.',
@@ -149,16 +152,6 @@ export const copy = {
       none: 'is a normal move',
     },
     bestWas: (san: string) => `Best was ${san}.`,
-    bestButton: 'Best',
-    resume: 'Resume',
-    // Retry mistakes (A2, lite practice mode): the "Try a better move" chip
-    // and the three coach-area states while it's active.
-    tryAgain: 'Try a better move',
-    retryPrompt: 'Your move — find the best one.',
-    retrySuccess: "That's the best move.",
-    retryWrong: 'Not quite — try again or see the best move.',
-    showBest: 'Show best',
-    next: 'Next ▶',
     prevLabel: 'Previous move',
     nextLabel: 'Next move',
     firstLabel: 'First move',
@@ -169,23 +162,16 @@ export const copy = {
     navLast: '▶|',
     // E1: the qualified line under each player's big accuracy % headline.
     estEloLine: (elo: number) => `est. ~${elo} Elo`,
-    // E2: verdict chip-button on the summary card, jumping to the first
-    // mistake/miss/blunder ply. Hidden entirely when n === 0.
-    stepBlunders: (n: number) => `Step through your ${n} ${n === 1 ? 'blunder' : 'blunders'} →`,
     // End-of-review closure line, plus the link onward.
     outcomeCheckmate: (winner: string) => `Checkmate — ${winner} wins.`,
     outcomeStalemate: 'Stalemate — a draw.',
     outcomeResult: (winner: string, result: string) => `${winner} wins ${result}.`,
     outcomeDraw: 'A draw.',
     analyzeAnother: 'Analyze another game →',
-    // Best-preview headline (the one-off "Best" toggle, distinct from live
-    // explore mode below).
-    exploring: 'Exploring the best line',
-    // Live explore mode (playable board + browser Stockfish): ExploreCard
-    // lines and the Undo chip. Resume reuses copy.coach.resume above.
+    // Live explore/branch mode (playable board + browser Stockfish):
+    // ExploreCard/BranchCard lines.
     exploreYourMove: 'Exploring — your move',
     exploreMoves: (sans: string) => `Exploring — ${sans}`,
-    exploreUndo: 'Undo',
     // Live engine lines panel (chess.com-style MultiPV list) — the sole owner
     // of engine-status copy; BranchCard no longer duplicates it.
     engineLinesLoading: 'Loading engine…',
@@ -208,20 +194,14 @@ export const copy = {
   // Leaderboard: public by construction, removable by anyone who asks.
   leader: {
     title: 'Leaderboard',
-    tabAccuracy: 'Accuracy',
-    tabBlunder: 'Blunder of the day',
     floorNote: 'Ranked after 50 analyzed games.',
     archetypeNote: 'Archetype is a playstyle read from your move history, not a rating.',
     empty: 'The board opens once someone finishes a 50-game analysis.',
-    emptyBlunder: 'No blunder has claimed the day yet.',
     colRank: '#',
     colPlayer: 'Player',
     colAccuracy: 'Accuracy',
     colGames: 'Games',
     colArchetype: 'Archetype',
-    blunderBy: (u: string) => `@${u}`,
-    blunderLine: (move: string, loss: number, opponent: string) =>
-      `${move} against ${opponent} threw away ${loss.toFixed(1)} points of win probability.`,
     removeTitle: 'Not into this?',
     removeNote: 'The board is built from public chess.com games. Remove yourself anytime.',
     removePlaceholder: 'chess.com username',

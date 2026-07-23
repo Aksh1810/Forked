@@ -25,10 +25,27 @@ export default function Games({ params }: { params: Promise<{ username: string }
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [resultFilter, setResultFilter] = useState<ResultFilter>('all')
+  // Item 6: which of this user's games have been analyzed at least once —
+  // nothing server-side records this, so it's a localStorage map read once
+  // per username (never during render, or it'd run on the server). gameId ->
+  // jobId; only the key's presence matters for the label, the jobId is kept
+  // in case something wants it later.
+  const [analyzed, setAnalyzed] = useState<Record<string, string>>({})
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     document.title = `${copy.browse.title(username)} | ${BRAND_NAME}`
+  }, [username])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`forked:analyzed:${username.toLowerCase()}`)
+      setAnalyzed(raw ? JSON.parse(raw) : {})
+    } catch {
+      // Private mode / quota errors must not break the list — just show
+      // every row as unanalyzed.
+      setAnalyzed({})
+    }
   }, [username])
 
   useEffect(() => {
@@ -144,6 +161,16 @@ export default function Games({ params }: { params: Promise<{ username: string }
       `games:${username.toLowerCase()}`,
       JSON.stringify({ rows, months, nextIdx, scrollY: window.scrollY }),
     )
+    // Item 6: remember this game was analyzed so a later visit to this list
+    // shows "Review" instead of "Analyze" — try/catch for the same reason as
+    // the read above (private mode / quota).
+    try {
+      const key = `forked:analyzed:${username.toLowerCase()}`
+      const map = { ...JSON.parse(localStorage.getItem(key) ?? '{}'), [row.id]: res.jobId }
+      localStorage.setItem(key, JSON.stringify(map))
+    } catch {
+      // Not critical — the click still works, it just won't say "Review" next time.
+    }
     router.push(`/j/${res.jobId}/g/${row.id}`)
   }
 
@@ -257,7 +284,7 @@ export default function Games({ params }: { params: Promise<{ username: string }
                                     void analyze(g)
                                   }}
                                 >
-                                  <AnalyzeLabel busy={busyId === g.id} />
+                                  <AnalyzeLabel busy={busyId === g.id} done={g.id in analyzed} />
                                 </button>
                               )}
                             </td>
@@ -300,7 +327,7 @@ export default function Games({ params }: { params: Promise<{ username: string }
                               </span>
                             ) : busy ? (
                               <span className="quiet">
-                                <AnalyzeLabel busy />
+                                <AnalyzeLabel busy done={g.id in analyzed} />
                               </span>
                             ) : (
                               <ResChip r={res} />
@@ -375,9 +402,11 @@ function ColorDot({ color }: { color: 'white' | 'black' | null }) {
 }
 
 // The analyze button's label, shared by the table row and the mobile card:
-// a spinner glyph in place of the idle text while this row's request is in flight.
-function AnalyzeLabel({ busy }: { busy: boolean }) {
-  if (!busy) return <>{copy.browse.analyze}</>
+// a spinner glyph in place of the idle text while this row's request is in
+// flight; otherwise "Review" once this game has been analyzed before
+// (item 6, the localStorage map above), "Analyze" if it hasn't.
+function AnalyzeLabel({ busy, done }: { busy: boolean; done: boolean }) {
+  if (!busy) return <>{done ? copy.browse.review : copy.browse.analyze}</>
   return (
     <>
       <span className="spin" aria-hidden>

@@ -74,23 +74,53 @@ export function dropAction({
   return downSelected ? 'deselect' : 'none'
 }
 
+// Knight moves bend rather than cutting diagonally through two squares
+// (chess.com/lichess convention): travel the 2-square leg first, then turn.
+export function arrowGeometry(
+  from: string,
+  to: string,
+  flip: boolean,
+): { shaft: { x: number; y: number }[]; tip: { x: number; y: number }; angle: number } {
+  const p1 = squareCenter(from, flip)
+  const p2 = squareCenter(to, flip)
+  const dx = p2.x - p1.x
+  const dy = p2.y - p1.y
+  // Knight test: {|dx|,|dy|} as a sorted pair equals [1,2]. Flip is a 180°
+  // rotation, so magnitudes are flip-invariant — testing the svg-space deltas
+  // is safe.
+  const mags = [Math.abs(dx), Math.abs(dy)].sort((a, b) => a - b)
+  const isKnight = mags[0] === 1 && mags[1] === 2
+  const elbow = isKnight ? { x: Math.abs(dx) === 2 ? p2.x : p1.x, y: Math.abs(dx) === 2 ? p1.y : p2.y } : null
+  // angle is measured on the final leg (elbow -> p2, or p1 -> p2 when
+  // straight), so the head still points at the destination.
+  const tailOfFinalLeg = elbow ?? p1
+  const angle = Math.atan2(p2.y - tailOfFinalLeg.y, p2.x - tailOfFinalLeg.x)
+  const headLen = 0.38
+  const tip = { x: p2.x - headLen * Math.cos(angle), y: p2.y - headLen * Math.sin(angle) }
+  const shaft = elbow ? [p1, elbow, tip] : [p1, tip]
+  return { shaft, tip, angle }
+}
+
 // Thick, translucent, rounded suggestion arrow (chess.com style): a wide
 // stroke and a proportionally bigger head read clearly at any board size.
 function Arrow({ from, to, color, flip }: { from: string; to: string; color: string; flip: boolean }) {
-  const p1 = squareCenter(from, flip)
-  const p2 = squareCenter(to, flip)
-  const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x)
-  const headLen = 0.38
-  const backX = p2.x - headLen * Math.cos(angle)
-  const backY = p2.y - headLen * Math.sin(angle)
+  const { shaft, tip, angle } = arrowGeometry(from, to, flip)
   const spread = 0.24
-  const leftX = backX + spread * Math.cos(angle + Math.PI / 2)
-  const leftY = backY + spread * Math.sin(angle + Math.PI / 2)
-  const rightX = backX + spread * Math.cos(angle - Math.PI / 2)
-  const rightY = backY + spread * Math.sin(angle - Math.PI / 2)
+  const leftX = tip.x + spread * Math.cos(angle + Math.PI / 2)
+  const leftY = tip.y + spread * Math.sin(angle + Math.PI / 2)
+  const rightX = tip.x + spread * Math.cos(angle - Math.PI / 2)
+  const rightY = tip.y + spread * Math.sin(angle - Math.PI / 2)
+  const p2 = squareCenter(to, flip)
   return (
     <g opacity={0.75}>
-      <line x1={p1.x} y1={p1.y} x2={backX} y2={backY} stroke={color} strokeWidth={0.22} strokeLinecap="round" />
+      <polyline
+        points={shaft.map((pt) => `${pt.x},${pt.y}`).join(' ')}
+        fill="none"
+        stroke={color}
+        strokeWidth={0.22}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <polygon points={`${p2.x},${p2.y} ${leftX},${leftY} ${rightX},${rightY}`} fill={color} />
     </g>
   )
@@ -296,10 +326,10 @@ export function Board({
                   className={badge?.kind === 'brilliant' || badge?.kind === 'great' ? 'badge-pop' : undefined}
                   style={{
                     position: 'absolute',
-                    top: '-8%',
-                    right: '-8%',
-                    width: '32%',
-                    height: '32%',
+                    top: badge?.kind === 'brilliant' ? '-12%' : '-8%',
+                    right: badge?.kind === 'brilliant' ? '-12%' : '-8%',
+                    width: badge?.kind === 'brilliant' ? '44%' : '32%',
+                    height: badge?.kind === 'brilliant' ? '44%' : '32%',
                     zIndex: 2,
                     borderRadius: '50%',
                     background: b.color,
@@ -309,7 +339,13 @@ export function Board({
                     fontSize: '50%',
                     fontWeight: 700,
                     lineHeight: 1,
-                    boxShadow: '0 1px 3px rgba(0,0,0,.5)',
+                    // Brilliant is the rarest tier — a box-shadow ring (not a
+                    // border, so no box-sizing risk) makes its badge read as
+                    // a bigger deal than every other tier's plain drop shadow.
+                    boxShadow:
+                      badge?.kind === 'brilliant'
+                        ? '0 0 0 2px #fff, 0 2px 6px rgba(0,0,0,.6)'
+                        : '0 1px 3px rgba(0,0,0,.5)',
                   }}
                 >
                   {b.glyph}

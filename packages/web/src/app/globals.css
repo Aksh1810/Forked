@@ -1028,13 +1028,10 @@ tr.row-click {
   .review {
     grid-template-columns: 1fr;
   }
-  /* Mobile order: board, then coach/summary card, buttons, graph, move
-     list, nav toolbar (B3: graph reads above the move list everywhere). */
+  /* Mobile order: board, then coach/summary card, graph, move list, nav
+     toolbar (B3: graph reads above the move list everywhere). */
   .review-panel > .coach-card {
     order: 0;
-  }
-  .review-panel .button-row {
-    order: 1;
   }
   .review-panel .review-graph {
     order: 2;
@@ -1085,16 +1082,6 @@ tr.row-click {
 }
 
 /* Leaderboard */
-.tab-row {
-  display: flex;
-  gap: 12px;
-  margin: 0 0 20px;
-}
-.tab-row a[aria-current='page'] {
-  background: var(--bone);
-  color: var(--void);
-  border-color: var(--bone);
-}
 .remove-row {
   display: flex;
   gap: 12px;
@@ -1541,14 +1528,8 @@ tr.row-click {
     grid-template-columns: 1fr;
   }
 }
-.tab-row .chip-button[aria-current='page'] {
-  background: var(--bone);
-  color: var(--void);
-  border-color: var(--bone);
-}
-
-/* H2: GooeyNav's pressed filter chip mirrors the tab-row's aria-current
-   weight — same "this is the active one" affordance, different attribute. */
+/* H2: GooeyNav's pressed filter chip carries the same "this is the active
+   one" weight as an aria-current page link elsewhere in the app. */
 .chip-button[aria-pressed='true'] {
   background: var(--bone);
   color: var(--void);

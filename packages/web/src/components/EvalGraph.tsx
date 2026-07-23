@@ -179,15 +179,12 @@ function HalfMove({
 // A tappable move list in paired full-move rows, chess.com style: move
 // number, White's SAN, Black's SAN, each with a leading piece glyph and a
 // tier chip. Selecting a ply here or on the graph drives the board and coach
-// card. While previewing the best move for a ply, an indented variation row
-// renders right after that ply's pair.
+// card.
 export function MoveList({
   record,
   sans,
   enriched,
   selected,
-  previewPly,
-  bestSan,
   onSelect,
   exploreLine,
 }: {
@@ -195,8 +192,6 @@ export function MoveList({
   sans: string[]
   enriched: Enriched[]
   selected: number | null
-  previewPly: number | null
-  bestSan: string | null
   onSelect: (ply: number) => void
   // Live explore mode (Wave 2): the branch line played from `afterPly`
   // onward, rendered as a .move-variation row right after that ply's pair
@@ -221,8 +216,6 @@ export function MoveList({
         </li>
       )}
       {rows.map((row) => {
-        const previewInRow =
-          previewPly === row.white.ply ? row.white.ply : previewPly === row.black?.ply ? row.black.ply : null
         const exploreInRow =
           exploreLine && exploreLine.afterPly !== 0
             ? exploreLine.afterPly === row.white.ply || exploreLine.afterPly === row.black?.ply
@@ -252,12 +245,6 @@ export function MoveList({
                 <span />
               )}
             </li>
-            {previewInRow !== null && bestSan && (
-              <li className="move-variation quiet mono">
-                {`${Math.ceil(previewInRow / 2)}${previewInRow % 2 ? '.' : '...'} `}
-                <TierIcon kind="best" size={14} /> {bestSan}
-              </li>
-            )}
             {exploreInRow && exploreLine && (
               <li className="move-variation quiet mono">
                 <ExploreVariation afterPly={exploreLine.afterPly} sans={exploreLine.sans} />
@@ -300,7 +287,6 @@ export function CoachCard({
   pv,
   outcome,
   nextHref,
-  preview,
   motif,
   openingName,
 }: {
@@ -313,26 +299,12 @@ export function CoachCard({
   // selected === total. Both undefined outside that moment.
   outcome?: string | null
   nextHref?: string
-  // Best-preview / explore mode: the headline switches entirely so the mode
-  // is never ambiguous (Cooper: never leave the user unsure which mode
-  // they're in).
-  preview?: boolean
   // Structured coach-motif reason for this ply (shared/classify.ts
   // moveMotif); the page turns it into a sentence via copy.ts templates.
   motif?: string | null
   // Book-tier plies name the opening they belong to.
   openingName?: string | null
 }) {
-  if (preview) {
-    return (
-      <div className="coach-card">
-        <div className="coach-head">
-          <TierIcon kind="best" size={22} />
-          <strong>{copy.coach.exploring}</strong>
-        </div>
-      </div>
-    )
-  }
   if (!p || !san) return <p className="coach-card quiet">{copy.coach.hint}</p>
   const headline = tier === 'book' && openingName ? bookHeadline(san, openingName) : `${san} ${copy.coach.is[tier]}`
   return (

@@ -105,7 +105,6 @@ function SummaryCard({
   phaseAcc,
   enriched,
   verdict,
-  onSelect,
 }: {
   white: string
   black: string
@@ -116,7 +115,6 @@ function SummaryCard({
   // E2: one-line verdict, reusing the same outcomeLine() the end-of-review
   // closure uses. Null for an unfinished/unresolved game.
   verdict: string | null
-  onSelect: (ply: number) => void
 }) {
   const counts = { white: {} as Record<Enriched, number>, black: {} as Record<Enriched, number> }
   for (const t of SUMMARY_ROWS) {
@@ -128,18 +126,10 @@ function SummaryCard({
     counts[i % 2 === 0 ? 'white' : 'black'][t] += 1
   })
   const rows = SUMMARY_ROWS.filter((t) => SUMMARY_ALWAYS.has(t) || counts.white[t] > 0 || counts.black[t] > 0)
-  // E2: the CTA that jumps straight to the first thing worth reviewing.
-  const firstBlunderPly = enriched.findIndex((t) => t === 'mistake' || t === 'miss' || t === 'blunder') + 1
-  const blunderCount = enriched.reduce((n, t) => (t === 'mistake' || t === 'miss' || t === 'blunder' ? n + 1 : n), 0)
 
   return (
     <div className="coach-card summary-card">
       {verdict && <p className="quiet" style={{ margin: '0 0 6px' }}>{verdict}</p>}
-      {blunderCount > 0 && (
-        <button className="chip-button" style={{ marginBottom: 8 }} onClick={() => onSelect(firstBlunderPly)}>
-          {copy.coach.stepBlunders(blunderCount)}
-        </button>
-      )}
       <div className="summary-heads mono">
         <span>{white}</span>
         <span>{black}</span>
@@ -195,35 +185,8 @@ function estimatedElo(accuracy: number): number {
   return Math.max(100, Math.round(elo / 10) * 10)
 }
 
-// Retry mode's coach-card slot (A2): swaps in for CoachCard while retrying
-// a mistake/miss/blunder ply. Three states — still guessing, wrong-but-legal
-// (offers the reveal chip), and solved.
-function RetryCard({ outcome, onShowBest }: { outcome: 'wrong' | 'success' | null; onShowBest: () => void }) {
-  if (outcome === 'success') {
-    return (
-      <div className="coach-card">
-        <div className="coach-head">
-          <TierIcon kind="best" size={22} />
-          <strong>{copy.coach.retrySuccess}</strong>
-        </div>
-      </div>
-    )
-  }
-  if (outcome === 'wrong') {
-    return (
-      <div className="coach-card">
-        <strong>{copy.coach.retryWrong}</strong>
-        <button className="chip-button" style={{ marginTop: 8 }} onClick={onShowBest}>
-          {copy.coach.showBest}
-        </button>
-      </div>
-    )
-  }
-  return <p className="coach-card quiet">{copy.coach.retryPrompt}</p>
-}
-
 // Live branch mode's coach-card slot (Wave 2): swaps in while a branch is
-// active. Same fixed-height .coach-card slot as CoachCard/RetryCard (the
+// active. Same fixed-height .coach-card slot as CoachCard/SummaryCard (the
 // class, not a variant), so the toolbar below never shifts on entry. Just the
 // headline — engine status (loading/failed) is EngineLines' job alone now
 // (FIX 7: this card used to duplicate that copy verbatim).
@@ -240,12 +203,11 @@ function BranchCard({ sans }: { sans: string[] }) {
 
 // The per-game review, chess.com style: eval bar flush against a big board
 // with coordinates, last-move tint, and a classification badge; a right panel
-// with a coach card / summary, a Best-preview + Next button row, the move
-// list, the eval graph, and a fixed prev/next/first/last toolbar. Nothing
-// above the toolbar changes height, so it and the buttons never move as the
-// coach text length varies. Polls until the engine record lands, so a
-// just-requested single-game analysis resolves in place instead of showing
-// "no analysis".
+// with a coach card / summary, the eval graph, the move list, and a fixed
+// prev/next/first/last toolbar. Nothing above the toolbar changes height, so
+// it never moves as the coach text length varies. Polls until the engine
+// record lands, so a just-requested single-game analysis resolves in place
+// instead of showing "no analysis".
 export default function Report({ params }: { params: Promise<{ jobId: string; gameId: string }> }) {
   const { jobId, gameId } = use(params)
   const [report, setReport] = useState<GameReport | null>(null)
@@ -255,17 +217,10 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // infinite sweep.
   const [pollFailed, setPollFailed] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
-  const [preview, setPreview] = useState(false)
-  // Retry mode (A2): separate from preview so a reveal-after-wrong-guess can
-  // reuse the preview rendering path without the two states fighting over
-  // the same flag. `from` is the clicked origin square (null = nothing
-  // picked yet); `outcome` is null while still guessing.
-  const [retry, setRetry] = useState<{ from: string | null; outcome: 'wrong' | 'success' | null } | null>(null)
   // Live branch mode (Wave 2): a free-play branch off the mainline. `base`
   // plies of the mainline stay fixed once the branch starts; `moves` grows
-  // (Undo) or shrinks (Undo) from there. `boardSel` is the in-progress
-  // piece-then-destination click state (clickMove), separate from retry's
-  // own `from` so the two modes never fight over one field.
+  // from there. `boardSel` is the in-progress piece-then-destination click
+  // state (clickMove).
   const [branch, setBranch] = useState<{ base: number; moves: string[] } | null>(null)
   const [boardSel, setBoardSel] = useState<string | null>(null)
   // Live badge for the last branch move (Task 6), judged once the live
@@ -377,8 +332,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // position (selected null), ArrowRight from the start goes to move 1.
   // A 0-ply record (no analyzed moves) is a no-op.
   // FIX 4 (spec §2): stepping always DISCARDS an active branch and steps the
-  // mainline — it does not repurpose the arrow keys as branch-undo. Undo
-  // stays available only via its own chip button (undoBranch below).
+  // mainline — a branch is exited wholesale, not undone move by move.
   useEffect(() => {
     if (total === 0) return
     function onKey(e: KeyboardEvent) {
@@ -393,10 +347,6 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     return () => window.removeEventListener('keydown', onKey)
   }, [total])
 
-  // Best-move preview is a one-off look; any new selection cancels it.
-  useEffect(() => setPreview(false), [selected])
-  // Retry mode is the same: stepping or picking another ply exits it.
-  useEffect(() => setRetry(null), [selected])
   // Branch mode: stepping or picking another ply exits it too (same pattern),
   // taking any pending/resolved live judgment on that branch with it.
   // Also clears liveUpdate here so the previous position's lines/depth don't
@@ -424,19 +374,13 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     )
   }, [branch, record])
 
-  // The position the board is showing (mainline, branch, preview, or retry).
-  // The engine analyzes it whenever engine output is visible — always,
-  // except while retry-guessing (live lines would reveal the answer).
+  // The position the board is showing (mainline or branch). The engine
+  // analyzes it whenever engine output is visible — always.
   const shownFen = useMemo(() => {
     if (!record) return null
     if (branch && branchFen) return branchFen
-    if (retry && retry.outcome !== 'success') return null // engine paused while guessing
-    if ((preview || retry?.outcome === 'success') && selected !== null) {
-      const p = record.plies.find((q) => q.ply === selected)
-      if (p) return fenBeforePly([...record.uciMoves.slice(0, selected - 1), p.best], selected + 1)
-    }
     return fenBeforePly(record.uciMoves, (selected ?? 0) + 1)
-  }, [record, branch, branchFen, retry, preview, selected])
+  }, [record, branch, branchFen, selected])
 
   // Start the engine as soon as the record lands (always-on live analysis).
   useEffect(() => {
@@ -585,15 +529,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   const ply = coach?.p ?? null
   const tier: Enriched = selected !== null ? enriched[selected - 1] ?? 'none' : 'none'
 
-  // Retry mode reuses the preview rendering path once it's solved — from
-  // then on the board and badge look exactly like the existing Best preview.
-  const showBestLine = preview || retry?.outcome === 'success'
-  const retryGuessing = retry !== null && retry.outcome !== 'success'
-
-  // retryGuessing is the one case shownFen deliberately can't cover (it
-  // returns null so the engine pauses) — every other mode reads straight
-  // from shownFen, which already mirrors this same if-chain.
-  const fen: string = retryGuessing ? fenBeforePly(record.uciMoves, selected ?? 0) : shownFen!
+  const fen: string = shownFen!
 
   // FIX 1b: the branch position one ply back — the parent of the LAST branch
   // move — used below to find a still-valid live eval while the new
@@ -607,25 +543,22 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     : null
 
   // The eval shown on the bar: the live engine's read of the shown position,
-  // once it has one. Otherwise (no live update yet, engine failed, or
-  // retry-guessing) the latest non-null stored eval at or before the
-  // selected ply (terminal mate/stalemate plies store null), else the start.
-  // While previewing the best move (or retrying one), that stored fallback
-  // shows the eval BEFORE the selected ply — the board isn't showing the
-  // played move's damage.
+  // once it has one. Otherwise (no live update yet, or engine failed) the
+  // latest non-null stored eval at or before the selected ply (terminal
+  // mate/stalemate plies store null), else the start.
   let shownEval: Eval
   // FIX 3: a terminal update has no lines[0] — fall through to the stored
   // eval instead of crashing on liveUpdate.lines[0].eval.
-  if (!retryGuessing && liveUpdate?.lines[0]) {
+  if (liveUpdate?.lines[0]) {
     shownEval = liveUpdate.lines[0].eval
-  } else if (!retryGuessing && branch && liveUpdate?.terminal) {
+  } else if (branch && liveUpdate?.terminal) {
     // FIX 1a: the mainline stored-eval fallback below is for `selected`'s
     // position (the branch BASE) — showing it here would put a stale eval on
     // the bar permanently, contradicting a mated/stalemated branch position.
     // `fen` already equals the branch's own position (shownFen resolves to
     // branchFen while a branch is active), so read the eval off it directly.
     shownEval = terminalEval(fen) ?? { type: 'cp', value: 0 }
-  } else if (!retryGuessing && branch && !liveUpdate && lastLiveRef.current?.fen === branchParentFen) {
+  } else if (branch && !liveUpdate && lastLiveRef.current?.fen === branchParentFen) {
     // FIX 1b: the engine hasn't produced an update for the new branch
     // position yet — hold the last real eval it produced for the position
     // one branch-move back, instead of snapping to the mainline base's
@@ -634,7 +567,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   } else {
     shownEval = record.startEval
     if (selected !== null) {
-      for (let i = selected - (showBestLine || retry ? 2 : 1); i >= 0; i--) {
+      for (let i = selected - 1; i >= 0; i--) {
         const e = record.plies[i]?.evalAfter
         if (e) {
           shownEval = e
@@ -662,13 +595,6 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
       const pv0 = liveUpdate.lines[0].pvUci[0]
       arrows = [{ from: pv0.slice(0, 2), to: pv0.slice(2, 4), color: 'var(--best)' }]
     }
-  } else if (retryGuessing) {
-    // No badge/tint/arrows while guessing — those would give the answer away.
-  } else if (showBestLine && ply) {
-    const dest = ply.best.slice(2, 4)
-    badge = { square: dest, kind: 'best' }
-    lastMove = { from: ply.best.slice(0, 2), to: dest }
-    tint = tierTint('best')
   } else if (ply) {
     const dest = ply.played.slice(2, 4)
     badge = tier !== 'none' ? { square: dest, kind: tier } : undefined
@@ -687,8 +613,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
 
   // FIX 4: stepping discards an active branch (spec §2) rather than being
   // disabled while one is active — shared by the nav-toolbar Prev/Next
-  // buttons; the bottom-row Next/Resume button only reaches this when
-  // !branch already, so the clearing here is a no-op for that caller.
+  // buttons.
   const step = (dir: 1 | -1) => {
     setBranch(null)
     pendingJudgeRef.current = null
@@ -701,27 +626,10 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // same-value setSelected React bails out of, so the [selected] mode-exit
   // effects above never fire for that path.
   const select = (p: number | null) => {
-    setPreview(false)
-    setRetry(null)
     setBranch(null)
     pendingJudgeRef.current = null
     setBranchBadge(null)
     setSelected(p)
-  }
-
-  const showBest = ply !== null && ply.best !== ply.played && !ply.book
-  const canRetry = ply !== null && (tier === 'mistake' || tier === 'miss' || tier === 'blunder')
-
-  // Retry click handler (A2), now a thin wrapper over the shared clickMove
-  // state machine. Grading is an exact uci match against p.best — no engine
-  // eval of arbitrary legal moves (ponytail: exact-match only, good enough
-  // for a lite practice loop).
-  function onRetrySquareClick(sq: string) {
-    if (!retry || retry.outcome === 'success' || !ply) return
-    const r = clickMove(fen, retry.from, sq)
-    if (r.kind === 'select') setRetry({ from: r.from, outcome: null })
-    else if (r.kind === 'deselect' || r.kind === 'reset') setRetry({ from: null, outcome: null })
-    else setRetry({ from: null, outcome: r.uci === ply.best ? 'success' : 'wrong' })
   }
 
   // Plays a user move on the shown position: steps forward when it IS the
@@ -739,17 +647,6 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     // the branch. ponytail: fast successive moves go unbadged rather than
     // mis-badged — no guessing when the engine hasn't caught up to `fen` yet.
     const live = lastLiveRef.current?.fen === fen ? lastLiveRef.current : null
-    if (!branch && showBestLine && ply && selected !== null) {
-      // The shown position has ply.best in place of the played move, so `uci`
-      // is only legal AFTER the best move — exit preview/retry and seed the
-      // branch with both moves, replaying the position actually on screen.
-      pendingJudgeRef.current = live ? { before: live.eval, bestUci: live.bestUci, uci } : null
-      setBranchBadge(null)
-      setPreview(false)
-      setRetry(null)
-      setBranch({ base: selected - 1, moves: [ply.best, uci] })
-      return
-    }
     if (!branch && uci === record.uciMoves[selected ?? 0]) {
       // Stepping the mainline forward — that ply already has a stored
       // classification (rendered outside branch mode), so any live judgment
@@ -764,23 +661,13 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     setBranch((b) => (b ? { base: b.base, moves: [...b.moves, uci] } : { base: selected ?? 0, moves: [uci] }))
   }
 
-  // Board click handler: the plain (no preview/no retry) board is always
-  // clickable. A completed legal move routes through playUserMove.
-  const clickable = !retryGuessing && !showBestLine
+  // Board click handler: the board is always clickable. A completed legal
+  // move routes through playUserMove.
   function onBoardSquareClick(sq: string) {
     const r = clickMove(fen, boardSel, sq)
     if (r.kind === 'select') setBoardSel(r.from)
     else if (r.kind === 'deselect' || r.kind === 'reset') setBoardSel(null)
     else playUserMove(r.uci)
-  }
-
-  // Undo pops one branch move; emptying the branch exits it entirely
-  // (shared by the ArrowLeft handler above and the Undo chip below).
-  function undoBranch() {
-    setLiveUpdate(null)
-    pendingJudgeRef.current = null
-    setBranchBadge(null)
-    setBranch((b) => (b && b.moves.length > 1 ? { base: b.base, moves: b.moves.slice(0, -1) } : null))
   }
 
   // The game's one-line verdict — used both as the end-of-review closure
@@ -815,7 +702,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
             <EvalBar ev={shownEval} flip={flip} />
             <div
               style={
-                showBestLine || branch
+                branch
                   ? { flex: 1, minWidth: 0, outline: '2px solid var(--best)', borderRadius: 2 }
                   : { flex: 1, minWidth: 0 }
               }
@@ -830,34 +717,21 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
                 badge={badge}
                 arrows={arrows}
                 alt={`position after ply ${selected ?? 0}`}
-                onSquareClick={retryGuessing ? onRetrySquareClick : clickable ? onBoardSquareClick : undefined}
-                selectedSq={retryGuessing ? (retry?.from ?? undefined) : clickable ? (boardSel ?? undefined) : undefined}
-                dests={retryGuessing ? destsFor(fen, retry?.from ?? null) : clickable ? destsFor(fen, boardSel) : undefined}
+                onSquareClick={onBoardSquareClick}
+                selectedSq={boardSel ?? undefined}
+                dests={destsFor(fen, boardSel)}
               />
             </div>
           </div>
           <p className="player-row mono quiet">{bottom.name}{bottom.rating != null ? ` (${bottom.rating})` : ''}</p>
 
-          {/* Live engine lines live under the board: depth + top-3 PVs. The
-              retry placeholder keeps the slot height so nothing jumps. */}
-          {retryGuessing ? (
-            <div className="engine-lines" />
-          ) : (
-            <EngineLines
-              status={engineStatus}
-              update={liveUpdate}
-              prefixUci={
-                branch
-                  ? [...branchPrefix, ...branch.moves]
-                  : showBestLine && ply && selected !== null
-                    ? // Preview/retry-success shows the position after ply.best,
-                      // not the played move — the PV prefix must match it.
-                      [...record.uciMoves.slice(0, selected - 1), ply.best]
-                    : record.uciMoves.slice(0, selected ?? 0)
-              }
-              onPlayMove={playUserMove}
-            />
-          )}
+          {/* Live engine lines live under the board: depth + top-3 PVs. */}
+          <EngineLines
+            status={engineStatus}
+            update={liveUpdate}
+            prefixUci={branch ? [...branchPrefix, ...branch.moves] : record.uciMoves.slice(0, selected ?? 0)}
+            onPlayMove={playUserMove}
+          />
         </div>
 
         <div className="review-panel">
@@ -872,10 +746,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
               phaseAcc={phaseAcc}
               enriched={enriched}
               verdict={verdict}
-              onSelect={select}
             />
-          ) : retry ? (
-            <RetryCard outcome={retry.outcome} onShowBest={() => { setPreview(true); setRetry(null) }} />
           ) : (
             <CoachCard
               key={selected}
@@ -886,37 +757,10 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
               pv={coach?.pv ?? []}
               outcome={outcome}
               nextHref={backHref}
-              preview={preview}
               motif={selected !== null ? motifLine(motifs[selected - 1] ?? null) : null}
               openingName={game.openingName}
             />
           )}
-
-          <div className="button-row">
-            {branch && (
-              <button className="chip-button" onClick={undoBranch}>
-                {copy.coach.exploreUndo}
-              </button>
-            )}
-            {!retry && !branch && showBest && (
-              <button className="chip-button" onClick={() => setPreview((v) => !v)} aria-pressed={preview}>
-                {copy.coach.bestButton}
-              </button>
-            )}
-            {!retry && !preview && !branch && canRetry && (
-              <button className="chip-button" onClick={() => setRetry({ from: null, outcome: null })}>
-                {copy.coach.tryAgain}
-              </button>
-            )}
-            {(preview || retry || branch) && (
-              <button
-                className="chip-button"
-                onClick={() => (branch ? setBranch(null) : retry ? setRetry(null) : setPreview(false))}
-              >
-                {copy.coach.resume}
-              </button>
-            )}
-          </div>
 
           <div className="review-graph">
             <EvalGraph
@@ -934,8 +778,6 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
             sans={sans}
             enriched={enriched}
             selected={selected}
-            previewPly={preview ? selected : null}
-            bestSan={preview ? (coach?.bestSan ?? null) : null}
             onSelect={select}
             exploreLine={branch ? { afterPly: branch.base, sans: branchSans } : null}
           />
