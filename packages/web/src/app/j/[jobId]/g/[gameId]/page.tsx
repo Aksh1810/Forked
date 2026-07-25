@@ -102,6 +102,45 @@ function AnalyzingBlock() {
   )
 }
 
+// Always-visible top metrics strip: each player's accuracy, est. Elo, and the
+// two counts that carry the story (brilliant, blunder). The viewer's side is
+// ringed. Complements the pre-review SummaryCard (which still holds the full
+// phase/tier tables in the panel).
+function ReviewMetrics({
+  white,
+  black,
+  whiteAcc,
+  blackAcc,
+  enriched,
+  userColor,
+}: {
+  white: string
+  black: string
+  whiteAcc: number | null
+  blackAcc: number | null
+  enriched: Enriched[]
+  userColor: 'white' | 'black' | null
+}) {
+  const count = (side: 0 | 1, tier: Enriched) => enriched.filter((t, i) => i % 2 === side && t === tier).length
+  const cell = (name: string, acc: number | null, side: 0 | 1) => (
+    <div className={`metric-cell${userColor === (side === 0 ? 'white' : 'black') ? ' metric-cell-you' : ''}`}>
+      <div className="metric-name mono">{name}</div>
+      <div className="metric-acc mono">{acc !== null ? `${acc.toFixed(1)}%` : '—'}</div>
+      <div className="metric-elo">{acc !== null ? copy.coach.estEloLine(estimatedElo(acc)) : ''}</div>
+      <div className="metric-chips mono">
+        <span className="metric-chip"><TierIcon kind="brilliant" size={13} /> {count(side, 'brilliant')}</span>
+        <span className="metric-chip"><TierIcon kind="blunder" size={13} /> {count(side, 'blunder')}</span>
+      </div>
+    </div>
+  )
+  return (
+    <div className="review-metrics">
+      {cell(white, whiteAcc, 0)}
+      {cell(black, blackAcc, 1)}
+    </div>
+  )
+}
+
 // The pre-review summary: per-player accuracy plus a tier-count table split
 // by mover. Shown in the coach card's slot while no move is selected yet.
 function SummaryCard({
@@ -625,6 +664,18 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
           {lostGame ? copy.coach.moment.openLost : copy.coach.moment.openSlipped}
         </Link>
       )}
+
+      {/* Always-visible metrics strip — accuracy + brilliant/blunder counts per
+          player, hoisted to the top per chess.com's Game Review hierarchy. The
+          viewer's side is emphasized. */}
+      <ReviewMetrics
+        white={game.white.name}
+        black={game.black.name}
+        whiteAcc={accuracies.white}
+        blackAcc={accuracies.black}
+        enriched={enriched}
+        userColor={report.userColor}
+      />
 
       <div className="review">
         <div className="review-left">

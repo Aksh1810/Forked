@@ -19,10 +19,30 @@ import { usePrefersReducedMotion } from './bits/reducedMotion'
 export function Story({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: string }) {
   const slides = buildSlides(wrapped, jobId)
   const cardIndex = slides.length - 1
-  const [i, setI] = useState(0)
+  // Deep-link the current slide (?s=N) so a single moment is directly
+  // shareable and reload lands where you left off.
+  const [i, setI] = useState(() => {
+    if (typeof window === 'undefined') return 0
+    const n = Number(new URLSearchParams(window.location.search).get('s'))
+    return Number.isFinite(n) ? Math.max(0, Math.min(slides.length - 1, n)) : 0
+  })
+  const [slideCopied, setSlideCopied] = useState(false)
   const reduced = usePrefersReducedMotion()
 
   const go = useCallback((n: number) => setI(Math.max(0, Math.min(slides.length - 1, n))), [slides.length])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const u = new URL(window.location.href)
+    u.searchParams.set('s', String(i))
+    window.history.replaceState(null, '', u)
+  }, [i])
+
+  function shareSlide() {
+    void navigator.clipboard?.writeText(window.location.href)
+    setSlideCopied(true)
+    setTimeout(() => setSlideCopied(false), 1500)
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -104,10 +124,18 @@ export function Story({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: stri
         </div>
       </section>
 
-      <footer style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0' }}>
-        <button className="link-button" onClick={() => go(0)}>
-          {story.replay}
-        </button>
+      <footer style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 0' }}>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <button className="link-button" onClick={() => go(0)}>
+            {story.replay}
+          </button>
+          {/* Per-slide share — the card slide already has its own share row. */}
+          {!onCard && (
+            <button className="link-button" onClick={shareSlide}>
+              {slideCopied ? story.slideCopied : story.shareSlide}
+            </button>
+          )}
+        </div>
         {!onCard && (
           <button className="link-button" onClick={() => go(cardIndex)}>
             {story.skipToCard}

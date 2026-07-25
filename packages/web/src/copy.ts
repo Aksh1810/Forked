@@ -199,6 +199,10 @@ export const copy = {
     exploreMoves: (sans: string) => `Exploring — ${sans}`,
     // Live engine lines panel (chess.com-style MultiPV list) — the sole owner
     // of engine-status copy; BranchCard no longer duplicates it.
+    // Per-line explore affordance in the engine panel — clicking a line plays
+    // its first move onto the board and opens explore mode.
+    engineExplore: (san: string) => `Explore ${san}`,
+    engineExploreCue: 'explore →',
     engineLinesLoading: 'Loading engine…',
     engineLinesUnavailable: 'Engine unavailable — stored analysis still shown.',
     // FIX 3: shown instead of the (would-be endless) loading line once the
@@ -306,6 +310,10 @@ export const story = {
   toCard: 'See your card',
   skipToCard: 'Skip to card',
   replay: 'Replay',
+  // Per-slide share: each slide is deep-linkable, so a viewer can send just
+  // this one moment rather than the whole story.
+  shareSlide: 'Share this',
+  slideCopied: 'Link copied',
 } as const
 
 // Delighter templates, one per weird-stat kind, keyed to match the shared

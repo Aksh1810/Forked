@@ -256,6 +256,56 @@ kbd {
   background: var(--bone);
 }
 
+/* Top metrics strip on the review board: accuracy + key counts per player,
+   the viewer's side ringed. Two facing cells (black mirrored right). */
+.review-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0 4px;
+}
+.metric-cell {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+}
+.metric-cell:last-child {
+  text-align: right;
+}
+.metric-cell-you {
+  border-color: color-mix(in srgb, var(--cta) 45%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cta) 22%, transparent);
+}
+.metric-name {
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+.metric-acc {
+  font-size: 1.75rem;
+  font-weight: 500;
+  line-height: 1.15;
+}
+.metric-elo {
+  color: var(--muted);
+  font-size: var(--fs-caption);
+}
+.metric-chips {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+.metric-cell:last-child .metric-chips {
+  justify-content: flex-end;
+}
+.metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Card share actions: one prominent primary, a uniform secondary cluster. */
 .share-row {
   display: flex;
@@ -1157,8 +1207,23 @@ tr.row-click {
   min-width: 44px;
 }
 .engine-line-sans {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Explore cue: always faintly present so the row reads as an action, brightens
+   on hover/focus. */
+.engine-line-go {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.5;
+  transition: opacity 140ms ease;
+}
+.engine-line:hover .engine-line-go,
+.engine-line:focus-visible .engine-line-go {
+  opacity: 1;
+  color: var(--bone);
 }
 .engine-lines-depth {
   font-size: 0.75rem;
@@ -1203,7 +1268,9 @@ tr.row-click {
 }
 
 .coach-flash {
-  animation: coach-flash 600ms ease-out;
+  /* Move-select feedback stays under the ~400ms Doherty threshold so the
+     response reads as immediate, not sluggish. */
+  animation: coach-flash 360ms ease-out;
 }
 
 /* Keyboard-step hint under the review's nav toolbar; meaningless on a touch

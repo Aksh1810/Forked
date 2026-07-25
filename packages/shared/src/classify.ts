@@ -168,11 +168,20 @@ export function enrichClassifications(record: EngineRecord): Enriched[] {
       // reads the pawn that moved, not the piece it became, which reads any
       // promotion the opponent can capture back as a "sacrifice".
       const isPromotion = p.played.length === 5
+      // Require a real net sacrifice (>= a minor piece's worth), not just any
+      // net-1 give-up: research (Zaidi & Guerzhoy, ICCC 2024) shows sac-only
+      // brilliance heuristics false-positive, and human-perceived brilliance
+      // tracks NON-OBVIOUSNESS, which a Stockfish-only pipeline can't measure
+      // directly. Tightening the material bar is the cheapest available hedge
+      // against over-claiming "brilliant".
+      // ponytail: true fix needs a non-obviousness signal (stored MultiPV gap
+      // to the 2nd-best move, or a weak-engine second pass) — neither is kept
+      // at analysis time today (uci.ts discards line 2).
       const sac =
         !isPromotion &&
         p.pv[1] !== undefined &&
         p.pv[1].slice(2, 4) === p.played.slice(2, 4) &&
-        movedValue > capturedValue
+        movedValue - capturedValue >= 2
       if (sac && wpBefore < 95 && wpAfter >= 40) tier = 'brilliant'
       else if (prevLoss >= MISTAKE_LOSS) tier = 'great' // punished the opponent's previous mistake/blunder
       else tier = 'best'

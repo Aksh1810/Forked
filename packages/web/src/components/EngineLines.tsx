@@ -34,12 +34,21 @@ export function EngineLines({
       {status === 'ready' && update && !update.terminal && (
         <>
           <p className="quiet mono engine-lines-depth">{copy.coach.engineDepth(update.depth)}</p>
-          {update.lines.map((l, i) => (
-            <button key={i} className="engine-line mono" onClick={() => onPlayMove(l.pvUci[0])}>
-              <span className="engine-line-eval">{formatEval(l.eval)}</span>
-              <span className="engine-line-sans">{sanMoves(l.pvUci.slice(0, 6), prefixUci).join(' ')}</span>
-            </button>
-          ))}
+          {update.lines.map((l, i) => {
+            const sans = sanMoves(l.pvUci.slice(0, 6), prefixUci)
+            return (
+              <button
+                key={i}
+                className="engine-line mono"
+                onClick={() => onPlayMove(l.pvUci[0])}
+                aria-label={copy.coach.engineExplore(sans[0] ?? '')}
+              >
+                <span className="engine-line-eval">{formatEval(l.eval)}</span>
+                <span className="engine-line-sans">{sans.join(' ')}</span>
+                <span className="engine-line-go" aria-hidden>{copy.coach.engineExploreCue}</span>
+              </button>
+            )
+          })}
         </>
       )}
     </div>
