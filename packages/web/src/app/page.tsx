@@ -69,6 +69,10 @@ export default function Landing() {
         fontSize={22}
         glyphs="♔♕♖♗♘♙♚♛♜♝♞♟"
       />
+      {/* Vignette scrim: the chess-glitch field stays vivid at the edges but
+          fades to void behind the hero column so the copy stays readable —
+          ambient noise at the periphery, a calm console at the center. */}
+      <div className="hero-scrim" aria-hidden />
       {/* D2: ClickSpark wraps only the hero heading now — it used to wrap the
           whole page, so any click anywhere sparked. */}
       <ClickSpark>
@@ -79,6 +83,7 @@ export default function Landing() {
       </ClickSpark>
       <p className="sub">{copy.sub}</p>
 
+      <div className="hero-panel">
       <form onSubmit={submit}>
         <input
           className="field"
@@ -149,6 +154,7 @@ export default function Landing() {
         </form>
         </FadeContent>
       )}
+      </div>
 
       <Ticker />
       <p>
@@ -187,7 +193,8 @@ function Ticker() {
         ' '
       ) : (
         <>
-          <CountUp to={n} duration={0.8} /> {copy.tickerSuffix}
+          <span className="live-dot" aria-hidden /> <CountUp to={n} duration={0.8} />{' '}
+          {copy.tickerSuffix}
         </>
       )}
     </p>

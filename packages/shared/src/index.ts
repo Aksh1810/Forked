@@ -76,6 +76,7 @@ export {
   type Enriched,
   type Motif,
 } from './classify.js'
+export { momentFor, type Moment } from './moment.js'
 export { moveAccuracyPct, gameAccuracies, phaseAccuracies } from './accuracy.js'
 export { cacheKey } from './cache-key.js'
 export { matchOpening, type OpeningMatch } from './openings.js'

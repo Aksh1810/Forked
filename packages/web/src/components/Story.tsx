@@ -4,9 +4,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { WrappedSummary } from '../lib/api'
 import { story, share, delighterLines } from '../copy'
-import { Board } from './Board'
 import { Card } from './Card'
-import { EvalCliff } from './EvalCliff'
+import { LetterGlitch } from './bits/LetterGlitch'
 import { Shuffle } from './bits/Shuffle'
 import { CountUp } from './bits/CountUp'
 import { usePrefersReducedMotion } from './bits/reducedMotion'
@@ -47,34 +46,33 @@ export function Story({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: stri
 
   return (
     <main
-      className="flow"
+      className="flow story-main"
       style={{ minHeight: 'calc(100dvh - 64px)', display: 'flex', flexDirection: 'column', paddingTop: 8 }}
     >
-      {/* Progress dots as annotation marks. Tappable, so navigation is never
-          keyboard- or gesture-only. */}
-      <nav aria-label="story progress" style={{ display: 'flex', gap: 8, justifyContent: 'center', padding: '8px 0' }}>
+      {/* Calm ambient chess field + center scrim — same identity as the landing
+          and analyze screens, dialed down so the story content leads. */}
+      <LetterGlitch
+        colors={['#2b4539', '#61dca3', '#61b3dc']}
+        opacity={0.16}
+        fontSize={20}
+        glyphs="♔♕♖♗♘♙♚♛♜♝♞♟"
+        tickMs={280}
+      />
+      <div className="ambient-scrim" aria-hidden />
+
+      {/* Segmented story-progress bar (Instagram-story convention): filled for
+          seen, bright for the current slide. Each segment is a 44px tap target. */}
+      <nav className="story-progress" aria-label="story progress">
         {slides.map((_, n) => (
           <button
             key={n}
+            className="story-seg"
             aria-label={`slide ${n + 1}`}
-            // J6: aria-current only when actually true — aria-current="false"
-            // on every other dot is noise a screen reader doesn't need.
+            // J6: aria-current only when actually true.
             aria-current={n === i || undefined}
             onClick={() => go(n)}
-            className="mono"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              minWidth: 44,
-              minHeight: 44,
-              // B6/J6: bone for the active dot, muted (not --line, which
-              // fails 3:1) for the rest.
-              color: n === i ? 'var(--bone)' : 'var(--muted)',
-              fontSize: 14,
-            }}
           >
-            {n === cardIndex ? '!' : n === i ? '?' : '.'}
+            <span className="story-seg-fill" data-state={n < i ? 'done' : n === i ? 'current' : 'todo'} />
           </button>
         ))}
       </nav>
@@ -98,9 +96,11 @@ export function Story({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: stri
         }}
       >
         {/* Keyed by slide index so each advance re-runs the entrance
-            animation; reduced motion drops the class and slides cut. */}
+            animation; reduced motion drops the class and slides cut. The card
+            is its own framed object; every other slide sits in the story frame
+            so it reads as one contained thing, not marooned in the void. */}
         <div key={i} className={reduced ? undefined : 'story-slide-in'}>
-          {slides[i].node(reduced)}
+          {onCard ? slides[i].node(reduced) : <div className="story-frame">{slides[i].node(reduced)}</div>}
         </div>
       </section>
 
@@ -164,58 +164,12 @@ function buildSlides(w: WrappedSummary, jobId: string): Slide[] {
     ),
   })
 
-  // 3. The flex
-  slides.push({
-    node: () => (
-      <div style={{ display: 'grid', gap: 12, justifyItems: 'start' }}>
-        {kicker(story.flexTitle)}
-        {w.flex ? (
-          <>
-            <Board fen={w.flex.fen} size={260} alt={`your best moment against ${w.flex.opponent}`} />
-            <div>
-              {w.flex.move && (
-                <span className="mono" style={{ fontSize: 20 }}>
-                  {w.flex.move} <span style={{ color: 'var(--best)' }}>!</span>{' '}
-                </span>
-              )}
-              <p style={{ margin: '6px 0 0' }}>
-                {w.flex.move
-                  ? story.flexLine(w.flex.move, oppName(w.flex.opponent))
-                  : story.flexGameLine(w.flex.accuracy, oppName(w.flex.opponent))}
-              </p>
-            </div>
-          </>
-        ) : (
-          <H>Not enough games to crown a best moment. Play more.</H>
-        )}
-      </div>
-    ),
-  })
+  // Single-move highlights (best moment / worst blunder) were removed here:
+  // across hundreds of games one cherry-picked move doesn't land. That drama
+  // now lives per-game in the "Moment you lost" reel, where the move is the
+  // whole point. The Wrapped stays about aggregate identity.
 
-  // 4. The worst blunder
-  slides.push({
-    node: () => (
-      <div style={{ display: 'grid', gap: 12, justifyItems: 'start' }}>
-        {kicker(story.blunderTitle)}
-        {w.worstBlunder ? (
-          <>
-            <Board fen={w.worstBlunder.fen} size={260} alt="the position before your worst move" />
-            <EvalCliff series={w.worstBlunder.cliff} />
-            <div>
-              <span className="mono" style={{ fontSize: 20 }}>
-                {w.worstBlunder.move} <span style={{ color: 'var(--blunder)' }}>??</span>
-              </span>
-              <p style={{ margin: '6px 0 0' }}>{story.blunderLine(w.worstBlunder.move, w.worstBlunder.lossPct)}</p>
-            </div>
-          </>
-        ) : (
-          <H>No real blunders to show. Suspicious.</H>
-        )}
-      </div>
-    ),
-  })
-
-  // 5. The poison opening
+  // 3. The poison opening
   slides.push({
     node: () => (
       <div>
@@ -285,12 +239,6 @@ function buildSlides(w: WrappedSummary, jobId: string): Slide[] {
   return slides
 }
 
-// A placeholder or missing opponent name reads as "an opponent" rather than
-// "?" or "undefined" in story copy.
-function oppName(name: string): string {
-  return name && name !== '?' && name !== 'undefined' ? name : 'an opponent'
-}
-
 function renderDelighter(d: NonNullable<WrappedSummary['delighter']>): string {
   switch (d.kind) {
     case 'longest-game':
@@ -306,26 +254,39 @@ function renderDelighter(d: NonNullable<WrappedSummary['delighter']>): string {
   }
 }
 
+// Accuracy-by-move-time bars. Scaled against the observed range (not a flat
+// 0–100) so the differences between buckets actually read; the % label on each
+// bar carries the true value, and the tallest bucket is tinted so the reader's
+// eye lands on "you play best when…" without relying on height alone.
 function BucketChart({ buckets }: { buckets: WrappedSummary['timePressure']['buckets'] }) {
-  const max = 100
+  const present = buckets.map((b) => b.accuracy).filter((v): v is number => v !== null)
+  const hi = present.length ? Math.max(...present) : 100
+  const lo = present.length ? Math.min(...present) : 0
+  const span = Math.max(1, hi - lo)
+  const MIN_H = 28
+  const MAX_H = 96
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', height: 90 }}>
-      {buckets.map((b) => (
-        <div key={b.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <div style={{ height: 60, width: '100%', display: 'flex', alignItems: 'flex-end' }}>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+      {buckets.map((b) => {
+        const isBest = b.accuracy !== null && b.accuracy === hi && present.length > 1
+        const h = b.accuracy === null ? 4 : MIN_H + ((b.accuracy - lo) / span) * (MAX_H - MIN_H)
+        return (
+          <div key={b.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <span className="mono" style={{ fontSize: 12, color: b.accuracy === null ? 'var(--muted)' : 'var(--bone)' }}>
+              {b.accuracy !== null ? `${b.accuracy.toFixed(0)}%` : '—'}
+            </span>
             <div
               style={{
                 width: '100%',
-                height: `${((b.accuracy ?? 0) / max) * 100}%`,
-                background: b.accuracy === null ? 'var(--line)' : 'var(--bone)',
-                borderRadius: '3px 3px 0 0',
+                height: h,
+                background: b.accuracy === null ? 'var(--line)' : isBest ? 'var(--best)' : 'var(--bone)',
+                borderRadius: '4px 4px 0 0',
               }}
-              title={b.accuracy !== null ? `${b.accuracy.toFixed(0)}%` : 'no data'}
             />
+            <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>{b.label}</span>
           </div>
-          <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>{b.label}</span>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

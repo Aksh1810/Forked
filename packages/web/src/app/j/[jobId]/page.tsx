@@ -8,6 +8,7 @@ import { getJob, type JobView } from '../../../lib/api'
 import { poll } from '../../../lib/poll'
 import { CountUp } from '../../../components/bits/CountUp'
 import { FadeContent } from '../../../components/bits/FadeContent'
+import { LetterGlitch } from '../../../components/bits/LetterGlitch'
 import { Noise } from '../../../components/bits/Noise'
 import { TextType } from '../../../components/bits/TextType'
 import { prefersReducedMotion } from '../../../components/bits/reducedMotion'
@@ -122,9 +123,20 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
   const fraction = job.total > 0 ? (job.status === 'complete' ? 1 : settled / job.total) : 0
   const statusLine = pickTeaser(job.agg, job.completed, job.total) ?? copy.statusLines[tick % copy.statusLines.length]
   const chips = [...job.ring].reverse()
+  // The chess-glitch field churns fast while the engine is busy and calms as
+  // games resolve — the background IS the progress signal, not decoration.
+  const glitchTick = Math.round(70 + fraction * 170)
 
   return (
     <main className="flow progress-main">
+      <LetterGlitch
+        colors={['#2b4539', '#61dca3', '#61b3dc']}
+        opacity={0.32}
+        fontSize={20}
+        glyphs="♔♕♖♗♘♙♚♛♜♝♞♟"
+        tickMs={terminal ? 320 : glitchTick}
+      />
+      <div className="ambient-scrim" aria-hidden />
       <Noise />
       <div
         className="eval-bar"

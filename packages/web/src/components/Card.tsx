@@ -64,7 +64,7 @@ export function Card({ wrapped, jobId }: { wrapped: WrappedSummary; jobId: strin
               <Stat label="Poison opening" value={`${wrapped.poisonOpening.family} ${wrapped.poisonOpening.multiplier}x`} small />
             )}
             {wrapped.timePressure.dropPct !== null && (
-              <Stat label="Under 30s" value={`-${wrapped.timePressure.dropPct.toFixed(1)}%`} small />
+              <Stat label="Under 30s" value={`-${Math.abs(wrapped.timePressure.dropPct).toFixed(1)}%`} small />
             )}
           </div>
 
@@ -116,33 +116,38 @@ function ShareRow({ wrapped, jobId, url }: { wrapped: WrappedSummary; jobId: str
 
   const canNativeShare = typeof navigator !== 'undefined' && 'share' in navigator
 
+  function copyLink() {
+    void navigator.clipboard?.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 16, justifyContent: 'center' }}>
-      {canNativeShare && (
-        <button className="cta" style={{ width: 'auto', padding: '0 20px' }} onClick={nativeShare}>
-          {share.shareNative}
-        </button>
-      )}
-      <a className="chip-button" href={cardUrl('4x5')} download="forked.png">{share.download}</a>
-      <a className="chip-button" href={cardUrl('9x16')} download="forked-story.png">{share.downloadStory}</a>
-      <button
-        className="chip-button"
-        onClick={() => {
-          void navigator.clipboard?.writeText(url)
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
-        }}
-      >
-        {copied ? share.copied : share.copyLink}
+    <div className="share-row">
+      {/* Primary action leads; everything else is a uniform secondary group so
+          the row reads as one intentional cluster, not a jumble of buttons.
+          The primary is the native share sheet where available, otherwise
+          copy-link (which then drops out of the secondary group). */}
+      <button className="cta share-primary" type="button" onClick={canNativeShare ? nativeShare : copyLink}>
+        {canNativeShare ? share.shareNative : copied ? share.copied : share.copyLink}
       </button>
-      <a
-        className="chip-button"
-        href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(share.xText(wrapped.archetype.name, url))}`}
-        target="_blank"
-        rel="noreferrer"
-      >
-        {share.shareX}
-      </a>
+      <div className="share-secondary">
+        {canNativeShare && (
+          <button className="chip-button" type="button" onClick={copyLink}>
+            {copied ? share.copied : share.copyLink}
+          </button>
+        )}
+        <a className="chip-button" href={cardUrl('4x5')} download="forked.png">{share.download}</a>
+        <a className="chip-button" href={cardUrl('9x16')} download="forked-story.png">{share.downloadStory}</a>
+        <a
+          className="chip-button"
+          href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(share.xText(wrapped.archetype.name, url))}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {share.shareX}
+        </a>
+      </div>
     </div>
   )
 }

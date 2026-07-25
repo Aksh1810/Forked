@@ -179,11 +179,133 @@ kbd {
 
 .headline .qq {
   color: var(--blunder);
+  /* Ties the red accent to the CTA glow below — one red, echoed twice. */
+  text-shadow: 0 0 24px color-mix(in srgb, var(--blunder) 45%, transparent);
 }
 
 .sub {
   color: var(--muted);
-  margin: 0 0 2rem;
+  margin: 0 0 1.75rem;
+}
+
+/* Fixed vignette above the glitch layer (z-index:-1, painted after it in the
+   DOM) and below the content: darkens the center to void for readability,
+   leaves the chess-noise vivid at the edges. */
+.hero-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 66% 62% at 50% 38%,
+    var(--void) 0%,
+    var(--void) 30%,
+    color-mix(in srgb, var(--void) 82%, transparent) 55%,
+    transparent 82%
+  );
+}
+
+/* Centered vignette for full-height ambient screens (the analyze/progress
+   wait): darkens the middle so counters stay legible over the glitch field. */
+.ambient-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 60% 55% at 50% 48%,
+    var(--void) 0%,
+    var(--void) 26%,
+    color-mix(in srgb, var(--void) 80%, transparent) 54%,
+    transparent 82%
+  );
+}
+
+/* Story: a segmented progress bar (replaces the cryptic . ? ! marks) and a
+   bounded, centered frame so each slide reads as one contained thing over the
+   ambient field instead of floating in the void. */
+.story-progress {
+  display: flex;
+  gap: 6px;
+  padding: 6px 2px 2px;
+  max-width: 440px;
+  margin: 0 auto;
+  width: 100%;
+}
+.story-seg {
+  flex: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  height: 34px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+.story-seg-fill {
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background 200ms ease;
+}
+.story-seg-fill[data-state='done'] {
+  background: var(--muted);
+}
+.story-seg-fill[data-state='current'] {
+  background: var(--bone);
+}
+
+/* Card share actions: one prominent primary, a uniform secondary cluster. */
+.share-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+.share-primary {
+  width: auto;
+  min-width: 220px;
+  padding: 0 28px;
+  margin-top: 0;
+}
+.share-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.story-frame {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  min-height: min(600px, 66vh);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 32px 30px;
+  background: linear-gradient(180deg, var(--surface-2), color-mix(in srgb, var(--surface) 86%, transparent));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  backdrop-filter: blur(8px);
+  box-shadow:
+    0 30px 80px -30px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 color-mix(in srgb, var(--bone) 7%, transparent);
+}
+
+/* The hero "console": a glass panel holding the input, CTA, and links so the
+   interactive core reads as one contained object over the ambient field. */
+.hero-panel {
+  background: linear-gradient(180deg, var(--surface-2), color-mix(in srgb, var(--surface) 88%, transparent));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 18px 14px;
+  backdrop-filter: blur(8px);
+  box-shadow:
+    0 24px 70px -28px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 color-mix(in srgb, var(--bone) 8%, transparent);
 }
 
 .field,
@@ -214,6 +336,13 @@ kbd {
   font-weight: 500;
   cursor: pointer;
   margin-top: 10px;
+  box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--cta) 70%, transparent);
+  transition: box-shadow 160ms ease, filter 160ms ease;
+}
+
+.cta:hover {
+  box-shadow: 0 12px 32px -8px color-mix(in srgb, var(--cta) 90%, transparent);
+  filter: brightness(1.06);
 }
 
 .cta:disabled {
@@ -250,6 +379,115 @@ kbd {
   font-size: 0.9375rem;
 }
 
+/* "The moment you lost" — the game-page entry pill and the cinematic page. */
+.moment-cta {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cta) 16%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--cta) 55%, var(--line));
+  color: var(--bone);
+  font-weight: 500;
+  text-decoration: none;
+  box-shadow: 0 6px 20px -8px color-mix(in srgb, var(--cta) 70%, transparent);
+  transition: box-shadow 160ms ease, filter 160ms ease;
+}
+.moment-cta:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 10px 28px -8px color-mix(in srgb, var(--cta) 90%, transparent);
+}
+
+.moment {
+  text-align: center;
+}
+.moment-vs {
+  margin: 8px 0 2px;
+}
+.moment-title {
+  font-size: clamp(1.75rem, 1.2rem + 2vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 18px;
+}
+.moment-stage {
+  position: relative;
+  border-radius: 14px;
+}
+/* The board-row already lays out eval bar + board; center it on this page. */
+.moment .board-row {
+  max-width: 560px;
+  margin: 0 auto;
+}
+.moment-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 14px;
+  background: radial-gradient(ellipse at center, transparent 30%, color-mix(in srgb, var(--blunder) 55%, transparent) 100%);
+  animation: moment-flash 900ms ease-out forwards;
+}
+.moment-stamp {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-size: clamp(2.5rem, 1.5rem + 6vw, 5rem);
+  letter-spacing: 0.06em;
+  color: var(--blunder);
+  text-shadow: 0 0 30px color-mix(in srgb, var(--blunder) 60%, transparent);
+  pointer-events: none;
+  animation: moment-stamp 500ms cubic-bezier(0.2, 1.4, 0.3, 1) both;
+}
+.moment-shake {
+  animation: moment-shake 420ms ease-in-out;
+}
+.moment-caption {
+  min-height: 1.6rem;
+  color: var(--bone);
+  margin: 16px 0 12px;
+  font-size: 1.05rem;
+}
+.moment-outro {
+  margin-top: 18px;
+  animation: bits-enter 300ms ease both;
+}
+.moment-roast {
+  color: var(--muted);
+  font-style: italic;
+  margin: 0 0 14px;
+}
+.moment-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+@keyframes moment-flash {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes moment-stamp {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-8deg) scale(2.4); }
+  100% { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1); }
+}
+@keyframes moment-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .moment-flash, .moment-stamp, .moment-shake, .moment-outro { animation: none; }
+}
+
 .inline-error {
   color: var(--accent-text);
   margin: 10px 0 0;
@@ -278,6 +516,28 @@ kbd {
   color: var(--muted);
   margin-top: 3rem;
   min-height: 1.5rem;
+}
+
+/* Live pulse next to the running positions-judged count — the page is doing
+   work right now, not showing a static number. */
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--best);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--best) 70%, transparent);
+  animation: live-pulse 2s ease-out infinite;
+}
+
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--best) 60%, transparent); }
+  70% { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
 }
 
 .footer {

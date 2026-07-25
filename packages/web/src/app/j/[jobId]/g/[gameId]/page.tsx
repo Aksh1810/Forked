@@ -10,6 +10,7 @@ import {
   fenBeforePly,
   finalStatus,
   gameAccuracies,
+  momentFor,
   moveMotif,
   phaseAccuracies,
   sanMoves,
@@ -505,6 +506,10 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   }
   const { game } = report
   const flip = report.userColor === 'black'
+  const moment = report.userColor ? momentFor(record, report.userColor) : null
+  const lostGame =
+    (report.userColor === 'white' && game.result === '0-1') ||
+    (report.userColor === 'black' && game.result === '1-0')
   const ply = coach?.p ?? null
   const tier: Enriched = selected !== null ? enriched[selected - 1] ?? 'none' : 'none'
 
@@ -615,6 +620,11 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
       <p className="quiet mono">
         {game.result} · {formatDate(game.date)} · {game.openingName ?? game.eco ?? 'unknown opening'}
       </p>
+      {moment && (
+        <Link className="moment-cta" href={`/j/${jobId}/g/${gameId}/moment`}>
+          {lostGame ? copy.coach.moment.openLost : copy.coach.moment.openSlipped}
+        </Link>
+      )}
 
       <div className="review">
         <div className="review-left">

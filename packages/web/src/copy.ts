@@ -167,6 +167,32 @@ export const copy = {
     outcomeResult: (winner: string, result: string) => `${winner} wins ${result}.`,
     outcomeDraw: 'A draw.',
     analyzeAnother: 'Analyze another game →',
+    // "The moment you lost": the cinematic replay of the game's turning point.
+    // Roasts target the move and the situation, never the player.
+    moment: {
+      openLost: 'The moment you lost →',
+      openSlipped: 'The moment it slipped →',
+      title: 'The moment you lost',
+      titleSlipped: 'The moment it slipped',
+      vs: (op: string) => `vs ${op}`,
+      calm: (moveNum: number) => `Move ${moveNum}. You're in this.`,
+      crash: (pct: number) => `−${pct}% in one move.`,
+      bestWas: (san: string) => `Best was ${san}.`,
+      stamp: 'BLUNDER',
+      roasts: [
+        'Stockfish is still processing what just happened.',
+        'That move had a family. It has one no longer.',
+        'You had a plan. The plan filed for divorce.',
+        'Somewhere, a chess coach felt a chill.',
+        'This is why the eval bar drinks.',
+        'A quiet move. A loud consequence.',
+      ],
+      replay: 'Replay',
+      copyLink: 'Copy link',
+      copied: 'Link copied',
+      backToGame: 'See the full game →',
+      noMoment: 'No single collapse — this one slipped away slowly.',
+    },
     // Live explore/branch mode (playable board + browser Stockfish):
     // ExploreCard/BranchCard lines.
     exploreYourMove: 'Exploring — your move',
