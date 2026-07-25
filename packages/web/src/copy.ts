@@ -44,14 +44,13 @@ export const copy = {
   inputPlaceholder: 'chess.com username',
   cta: 'Show my games',
   ctaBusy: 'Fetching your games...',
-  wrappedToggle: 'Or get the whole-history Wrapped story instead',
+  wrappedToggle: 'Get the whole-history Wrapped story instead',
   wrappedCta: 'Analyze my games',
   pgnPlaceholder: 'Paste PGN here',
   tickerSuffix: 'positions judged',
   leaderboard: 'Leaderboard',
   yourLink: 'This page is your link. Come back anytime.',
   browseHint: 'Enter your chess.com username first.',
-  demoLink: 'just show me one →',
   privacyLine: 'Public chess.com games only. Nothing to sign up for.',
 
   errors: {

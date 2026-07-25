@@ -191,7 +191,16 @@ export function MoveList({
   exploreLine?: { afterPly: number; sans: string[] } | null
 }) {
   useEffect(() => {
-    document.querySelector('.move-selected')?.scrollIntoView({ block: 'nearest' })
+    const el = document.querySelector('.move-selected') as HTMLElement | null
+    el?.scrollIntoView({ block: 'nearest' })
+    // The focus ring must follow the selection: if a stale move-cell still
+    // holds focus after navigating, move focus to the current move (or drop
+    // it) so its white outline doesn't linger on the old move.
+    const active = document.activeElement
+    if (active instanceof HTMLElement && active.classList.contains('move-cell') && active !== el) {
+      if (el) el.focus({ preventScroll: true })
+      else active.blur()
+    }
   }, [selected])
 
   const rows: { num: number; white: PlyAnalysis; black?: PlyAnalysis }[] = []

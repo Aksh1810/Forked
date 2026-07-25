@@ -101,9 +101,6 @@ export default function Landing() {
           </p>
         )}
         {/* D3: plain quiet links — one accent object in the hero (the CTA). */}
-        <Link href="/u/erik" className="link-button">
-          {copy.demoLink}
-        </Link>{' '}
         <button
           type="button"
           className="link-button"
