@@ -2,7 +2,7 @@
 // SSR-safe by construction — Worker/document are only touched inside methods
 // (start/dispose), never at module scope, so importing this file on the
 // server does nothing.
-import type { Eval } from '@forked/shared'
+import { parseUciInfo, type Eval } from '@forked/shared'
 
 export interface EngineLine {
   eval: Eval
@@ -29,32 +29,21 @@ const MIN_DEPTH = 10
 const WATCHDOG_MS = 12_000
 
 // Parses one `info ...` UCI line into a White-perspective update, or null for
-// anything that isn't an exact-score info line (bestmove/currmove/junk, and
-// upper/lowerbound lines — those bracket the true score, not report it).
-// UCI scores are relative to the side to move; negate for Black so the eval
-// bar always reads White-positive, matching the shared Eval shape.
+// anything that isn't an exact-score info line with a depth and a pv
+// (bestmove/currmove/junk, and upper/lowerbound lines all excluded). The
+// side-to-move sign flip now happens inside parseUciInfo.
 export function parseInfoLine(
   line: string,
   blackToMove: boolean,
 ): { depth: number; multipv: number; eval: Eval; pvUci: string[] } | null {
-  if (!/^info\b/.test(line)) return null
-  if (/\b(upperbound|lowerbound)\b/.test(line)) return null
-
-  const depthM = /\bdepth (\d+)/.exec(line)
-  const scoreM = /\bscore (cp|mate) (-?\d+)/.exec(line)
-  const pvM = /\bpv (.+)$/.exec(line)
-  if (!depthM || !scoreM || !pvM) return null
-
-  const multipvM = /\bmultipv (\d+)/.exec(line)
-  const rawType = scoreM[1] as 'cp' | 'mate'
-  const rawValue = Number(scoreM[2])
-  const value = !blackToMove || rawValue === 0 ? rawValue : -rawValue
+  const info = parseUciInfo(line, blackToMove ? 'black' : 'white')
+  if (!info || info.bound || info.depth === null || info.pv.length === 0) return null
 
   return {
-    depth: Number(depthM[1]),
-    multipv: multipvM ? Number(multipvM[1]) : 1,
-    eval: { type: rawType, value } as Eval,
-    pvUci: pvM[1].trim().split(/\s+/),
+    depth: info.depth,
+    multipv: info.multipv,
+    eval: info.eval,
+    pvUci: info.pv,
   }
 }
 

@@ -16,3 +16,22 @@ export function moverWinPct(ev: Eval, mover: 'white' | 'black'): number {
   const w = whiteWinPct(ev)
   return mover === 'white' ? w : 100 - w
 }
+
+// The index of the steepest single step in a win-probability series — the ply
+// the graph falls off. Every cliff rendering (the on-page sparkline and the
+// share card's bar version) marks the same point because they all read this.
+// Returns 1 for a series with no movement, and 0 for a series too short to
+// have a step.
+export function cliffIndex(series: readonly number[]): number {
+  if (series.length < 2) return 0
+  let at = 1
+  let biggest = 0
+  for (let i = 1; i < series.length; i++) {
+    const d = Math.abs(series[i] - series[i - 1])
+    if (d > biggest) {
+      biggest = d
+      at = i
+    }
+  }
+  return at
+}

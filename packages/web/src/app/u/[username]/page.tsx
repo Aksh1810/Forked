@@ -3,7 +3,7 @@
 import { Fragment, use, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { BRAND_NAME } from '@forked/shared'
+import { BRAND_NAME, outcomeFor } from '@forked/shared'
 import { copy, formatDate, formatMonth } from '../../../copy'
 import { getJob, getUserGames, postIngest, type GameRow } from '../../../lib/api'
 import { GooeyNav } from '../../../components/bits/GooeyNav'
@@ -176,7 +176,7 @@ export default function Games({ params }: { params: Promise<{ username: string }
 
   // B4: Won/Lost filter over the rows already loaded — no refetch, no
   // interaction with the infinite-scroll sentinel below.
-  const filteredRows = resultFilter === 'all' ? rows : rows.filter((g) => resultLetter(g) === resultFilter)
+  const filteredRows = resultFilter === 'all' ? rows : rows.filter((g) => outcomeFor(g.result, g.userColor) === resultFilter)
   // B5: a sticky month header renders right before the first row of a new
   // month, computed off the FILTERED list so headers match what's on screen.
   const withMonthHeaders = filteredRows.map((g, i) => ({
@@ -245,7 +245,7 @@ export default function Games({ params }: { params: Promise<{ username: string }
                   </thead>
                   <tbody>
                     {withMonthHeaders.map(({ g, monthHeader }) => {
-                      const res = resultLetter(g)
+                      const res = outcomeFor(g.result, g.userColor)
                       const rating = opponentRating(g)
                       return (
                         <Fragment key={g.id}>
@@ -298,7 +298,7 @@ export default function Games({ params }: { params: Promise<{ username: string }
 
               <ul className="game-cards" key={`cards-${resultFilter}`}>
                 {withMonthHeaders.map(({ g, monthHeader }) => {
-                  const res = resultLetter(g)
+                  const res = outcomeFor(g.result, g.userColor)
                   const rating = opponentRating(g)
                   const busy = busyId === g.id
                   return (
@@ -368,15 +368,6 @@ export default function Games({ params }: { params: Promise<{ username: string }
       )}
     </main>
   )
-}
-
-// Result from the user's perspective; '?' when the game is unfinished or the
-// user is not a named player (should not happen for a real archive).
-function resultLetter(g: GameRow): 'w' | 'l' | 'd' | '?' {
-  if (g.result === '1/2-1/2') return 'd'
-  if (!g.userColor || (g.result !== '1-0' && g.result !== '0-1')) return '?'
-  const won = (g.result === '1-0') === (g.userColor === 'white')
-  return won ? 'w' : 'l'
 }
 
 function opponent(g: GameRow): string {

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createInterface, type Interface } from 'node:readline'
-import type { Eval } from '@forked/shared'
+import { parseUciInfo, sideToMove, type Eval, type UciInfo } from '@forked/shared'
 
 export class EngineTimeoutError extends Error {
   constructor(message: string) {
@@ -37,15 +37,6 @@ interface Waiter {
   predicate: (line: string) => boolean
   onLine?: (line: string) => void
   timer: NodeJS.Timeout
-}
-
-const SCORE_RE = / score (cp|mate) (-?\d+)/
-const MULTIPV_RE = / multipv (\d+)/
-
-interface ScoredInfo {
-  kind: 'cp' | 'mate'
-  value: number
-  pv: string[]
 }
 
 // One Stockfish process, driven over UCI via stdin/stdout, reused across
@@ -111,47 +102,34 @@ export class Engine {
   // trimmed to 6 plies. The watchdog covers the whole position: on trip the
   // engine process is killed and EngineTimeoutError is thrown.
   async analyzePosition(moves: readonly string[], nodes: number, watchdogMs = 30_000): Promise<PositionAnalysis> {
-    const whiteToMove = moves.length % 2 === 0
     this.send(moves.length ? `position startpos moves ${moves.join(' ')}` : 'position startpos')
     this.send(`go nodes ${nodes}`)
 
-    let exact: ScoredInfo | null = null
-    let bound: ScoredInfo | null = null
+    let exact: UciInfo | null = null
+    let bound: UciInfo | null = null
     const bestLine = await this.waitFor(
       (l) => l.startsWith('bestmove '),
       watchdogMs,
       `bestmove after ${moves.length} plies`,
       (l) => {
-        if (!l.startsWith('info ')) return
-        const score = SCORE_RE.exec(l)
-        if (!score) return
-        const multipv = MULTIPV_RE.exec(l)
-        if (multipv && multipv[1] !== '1') return
-        const info: ScoredInfo = {
-          kind: score[1] as 'cp' | 'mate',
-          value: Number(score[2]),
-          pv: l.split(' pv ')[1]?.trim().split(/\s+/) ?? [],
-        }
+        const info = parseUciInfo(l, sideToMove(moves.length))
+        if (!info) return
+        if (info.multipv !== 1) return
         // Aspiration-window re-searches emit lowerbound/upperbound lines; a
         // node-limit stop can leave one as the final line. Prefer the last
         // EXACT score, falling back to a bound only if no exact line came.
-        if (l.includes(' lowerbound') || l.includes(' upperbound')) bound = info
+        if (info.bound) bound = info
         else exact = info
       },
     )
 
     // The casts re-widen after the closure writes above; TS control-flow
     // analysis cannot see assignments made inside the onLine callback.
-    const found = (exact ?? bound) as ScoredInfo | null
+    const found = (exact ?? bound) as UciInfo | null
     if (!found) throw new Error('engine sent bestmove without any scored info line')
-    // UCI scores are from the side to move's perspective; normalize to
-    // White's perspective here, at the wrapper boundary, and nowhere else.
-    const sign = whiteToMove ? 1 : -1
+    // Normalization to White's perspective now happens inside parseUciInfo.
     return {
-      eval:
-        found.kind === 'cp'
-          ? { type: 'cp', value: sign * found.value }
-          : { type: 'mate', value: sign * found.value },
+      eval: found.eval,
       best: bestLine.split(/\s+/)[1],
       pv: found.pv.slice(0, 6),
     }

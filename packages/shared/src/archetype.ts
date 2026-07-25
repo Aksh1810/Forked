@@ -1,7 +1,5 @@
-import { moveAccuracyPct, gameAccuracies } from './accuracy.js'
-import { openingFamily } from './aggregates.js'
-import { finalStatus } from './pgn.js'
-import { userMoves, type AnalyzedGame } from './insights.js'
+import { moveAccuracyPct } from './accuracy.js'
+import { walkGame, type AnalyzedGame } from './walk.js'
 
 // The computed features an archetype is decided from. Kept separate from the
 // decision so the decision is a pure, exhaustively table-testable function.
@@ -115,12 +113,12 @@ export function computeArchetypeFeatures(
   timePressureDropPct: number | null,
 ): ArchetypeFeatures {
   const userGames = games.filter((g) => g.userColor)
-  const allMoves = userGames.flatMap(userMoves)
+  const walks = userGames.map(walkGame)
+  const allMoves = walks.flatMap((w) => w.moves)
 
   const famCounts = new Map<string, number>()
-  for (const g of userGames) {
-    const fam = openingFamily(g.game.eco, g.game.openingName)
-    famCounts.set(fam, (famCounts.get(fam) ?? 0) + 1)
+  for (const w of walks) {
+    famCounts.set(w.family, (famCounts.get(w.family) ?? 0) + 1)
   }
   const maxFamilyShare = userGames.length ? Math.max(0, ...famCounts.values()) / userGames.length : 0
 
@@ -139,9 +137,12 @@ export function computeArchetypeFeatures(
   // Post-book accuracy: the user's non-book moves in the first six plies after
   // book, versus their overall accuracy. A large drop is the sprinter tell.
   const postBookLosses: number[] = []
-  for (const g of userGames) {
-    const book = g.record.plies.filter((p) => p.book).length
-    for (const m of userMoves(g)) {
+  for (let i = 0; i < userGames.length; i++) {
+    // This is the stored per-ply book flags, a DIFFERENT quantity from
+    // walk.bookPlies (the opening-table prefix length) — keep this exact
+    // derivation, do not substitute bookPlies here.
+    const book = userGames[i].record.plies.filter((p) => p.book).length
+    for (const m of walks[i].moves) {
       if (m.ply > book && m.ply <= book + 6) postBookLosses.push(m.lossPct)
     }
   }
@@ -160,18 +161,17 @@ export function computeArchetypeFeatures(
   // how many they went on to win.
   let winningReached = 0
   let winningWon = 0
-  for (const g of userGames) {
-    const ms = userMoves(g)
-    const reached = ms.some((m) => m.wpBefore > 80 || m.wpAfter > 80)
+  for (const w of walks) {
+    const reached = w.moves.some((m) => m.wpBefore > 80 || m.wpAfter > 80)
     if (reached) {
       winningReached += 1
-      if (ms[0]?.won) winningWon += 1
+      if (w.moves[0]?.won) winningWon += 1
     }
   }
   const winningConversion = winningReached ? winningWon / winningReached : null
 
-  const perGameAcc = userGames.flatMap((g) => {
-    const a = gameAccuracies(g.record, finalStatus(g.record.uciMoves))[g.userColor as 'white' | 'black']
+  const perGameAcc = userGames.flatMap((g, i) => {
+    const a = walks[i].accuracies[g.userColor as 'white' | 'black']
     return a === null ? [] : [a]
   })
 

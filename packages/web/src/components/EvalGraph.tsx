@@ -3,7 +3,7 @@
 import { Fragment, useEffect } from 'react'
 import Link from 'next/link'
 import { area, scaleLinear, line } from 'd3'
-import type { EngineRecord, Enriched, PlyAnalysis } from '@forked/shared'
+import { whiteWinPct, type EngineRecord, type Enriched, type PlyAnalysis } from '@forked/shared'
 import { bookHeadline, copy } from '../copy'
 import { KEY_TIERS, TIER, TierIcon } from './classification'
 import { formatEval } from './EvalBar'
@@ -19,9 +19,7 @@ import { Piece } from './pieces'
 // point instead of snapping back to the start eval (which drew a full-height
 // spike at the right edge of every decisive game's graph).
 function whitePct(ev: EngineRecord['plies'][number]['evalAfter'], prev: number): number {
-  if (ev === null) return prev
-  if (ev.type === 'mate') return ev.value > 0 ? 100 : 0
-  return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * ev.value)) - 1)
+  return ev === null ? prev : whiteWinPct(ev)
 }
 
 export function EvalGraph({
@@ -46,14 +44,7 @@ export function EvalGraph({
   const m = { top: 12, right: 12, bottom: 20, left: 32 }
   const iw = width - m.left - m.right
   const ih = height - m.top - m.bottom
-  const startWhite =
-    record.startEval.type === 'mate'
-      ? record.startEval.value > 0
-        ? 100
-        : 0
-      : 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * record.startEval.value)) - 1)
-
-  let prev = startWhite
+  let prev = whiteWinPct(record.startEval)
   const pts = record.plies.map((p) => {
     prev = whitePct(p.evalAfter, prev)
     return { ply: p.ply, wp: prev }

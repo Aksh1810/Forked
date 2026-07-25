@@ -57,7 +57,10 @@ flowchart LR
 One npm-workspaces monorepo: `packages/shared` (pure domain logic, the most
 heavily tested code in the repo), `packages/worker` (UCI engine wrapper and
 both worker entrypoints), `packages/control` (HTTP API, ingest, janitor, CDK
-stack), `packages/web` (Next.js frontend).
+stack), `packages/web` (Next.js frontend). The domain vocabulary — engine
+record, game walk, player identity, review session, the classification-vs-tier
+split — is defined in [`CONTEXT.md`](CONTEXT.md); each concept lives behind one
+module named after it.
 
 ## The engineering that matters
 

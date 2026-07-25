@@ -18,6 +18,7 @@ import {
   lockKey,
   metricsKey,
   parseAllGamesPgn,
+  playerColor,
   rateKey,
   type GameItem,
 } from '@forked/shared'
@@ -299,12 +300,7 @@ function toGameItem(
     attempts: 0,
     cacheKey: key,
     uciMoves: p?.uciMoves ?? [],
-    userColor:
-      p && username && p.white.name.toLowerCase() === username
-        ? 'white'
-        : p && username && p.black.name.toLowerCase() === username
-          ? 'black'
-          : null,
+    userColor: p ? playerColor(p, username) : null,
     nodeBudget,
     game: {
       gameId: g.id,

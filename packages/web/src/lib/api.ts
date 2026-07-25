@@ -1,25 +1,18 @@
-import type { EngineRecord, GameRecord, WrappedSummary } from '@forked/shared'
+import type {
+  EngineRecord,
+  GameRecord,
+  PartialAgg,
+  RingEntry,
+  WrappedSummary,
+} from '@forked/shared'
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8787'
 export type { WrappedSummary } from '@forked/shared'
 
-export interface RingEntryView {
-  gameId: string
-  accuracy: number | null
-  finishedAt: string
-  opp: string
-  res: 'w' | 'l' | 'd' | '?'
-  plies: number
-}
-
-export interface PartialAgg {
-  accSum: number
-  accCnt: number
-  opb: Record<string, number>
-  opm: Record<string, number>
-  phb: Record<string, number>
-  phm: Record<string, number>
-}
+// The ring and the aggregates come off the wire in the exact shapes the job
+// item stores them in, so they are those types — restating them here let the
+// two drift.
+export type { PartialAgg, RingEntry } from '@forked/shared'
 
 export interface JobView {
   jobId: string
@@ -30,7 +23,7 @@ export interface JobView {
   total: number
   completed: number
   failed: number
-  ring: RingEntryView[]
+  ring: RingEntry[]
   agg: PartialAgg
   createdAt: string
   // Cheap observed-throughput projection (control/status.ts); null when the

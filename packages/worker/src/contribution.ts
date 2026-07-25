@@ -4,6 +4,7 @@ import {
   gamePhases,
   matchOpening,
   openingFamily,
+  outcomeFor,
   type EngineRecord,
   type GameItem,
   type RingEntry,
@@ -34,8 +35,6 @@ export function buildDoneOutcome(
   // Chips are from the user's perspective; a PGN-paste job with no matched
   // username falls back to White's.
   const color = game.userColor ?? 'white'
-  const won = game.game.result === (color === 'white' ? '1-0' : '0-1')
-  const lost = game.game.result === (color === 'white' ? '0-1' : '1-0')
   return {
     kind: 'done',
     attempts,
@@ -45,7 +44,7 @@ export function buildDoneOutcome(
       accuracy: contribution.accuracy,
       finishedAt: new Date().toISOString(),
       opp: color === 'white' ? game.game.black.name : game.game.white.name,
-      res: won ? 'w' : lost ? 'l' : game.game.result === '1/2-1/2' ? 'd' : '?',
+      res: outcomeFor(game.game.result, color),
       plies: record.plies.length,
     },
   }

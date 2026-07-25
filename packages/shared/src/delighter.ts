@@ -1,6 +1,6 @@
 import { Chess, normalizeMove } from 'chessops/chess'
 import { parseUci } from 'chessops/util'
-import { userMoves, type AnalyzedGame } from './insights.js'
+import { walkGame, type AnalyzedGame } from './walk.js'
 
 // The delighter: one rotating weird-stat slot, whichever is most statistically
 // distinctive for this user. Each candidate carries a distinctiveness score;
@@ -48,7 +48,8 @@ function roleToChar(role: string): string {
 export function selectDelighter(games: readonly AnalyzedGame[]): Delighter | null {
   const userGames = games.filter((g) => g.userColor)
   if (!userGames.length) return null
-  const allMoves = userGames.flatMap(userMoves)
+  const walks = userGames.map(walkGame)
+  const allMoves = walks.flatMap((w) => w.moves)
 
   const candidates: { d: Delighter; score: number }[] = []
 
@@ -61,7 +62,7 @@ export function selectDelighter(games: readonly AnalyzedGame[]): Delighter | nul
       d: {
         kind: 'longest-game',
         plies: longest.record.plies.length,
-        opponent: longest.userColor === 'white' ? longest.game.black.name : longest.game.white.name,
+        opponent: walkGame(longest).opponent,
       },
       score: longest.record.plies.length / Math.max(1, medianLen),
     })
@@ -70,7 +71,7 @@ export function selectDelighter(games: readonly AnalyzedGame[]): Delighter | nul
   // Most-faced opponent: distinctive when one name recurs.
   const faced = new Map<string, number>()
   for (const g of userGames) {
-    const opp = g.userColor === 'white' ? g.game.black.name : g.game.white.name
+    const opp = walkGame(g).opponent
     if (opp && opp !== '?') faced.set(opp, (faced.get(opp) ?? 0) + 1)
   }
   const topFaced = [...faced.entries()].sort(([, a], [, b]) => b - a)[0]
@@ -111,9 +112,8 @@ export function selectDelighter(games: readonly AnalyzedGame[]): Delighter | nul
 
   // Comebacks: games the user was losing (reached < 20% win) then won.
   let comebacks = 0
-  for (const g of userGames) {
-    const ms = userMoves(g)
-    if (ms[0]?.won && ms.some((m) => m.wpBefore < 20 || m.wpAfter < 20)) comebacks += 1
+  for (const w of walks) {
+    if (w.moves[0]?.won && w.moves.some((m) => m.wpBefore < 20 || m.wpAfter < 20)) comebacks += 1
   }
   if (comebacks >= 2) candidates.push({ d: { kind: 'comebacks', count: comebacks }, score: comebacks * 2 })
 

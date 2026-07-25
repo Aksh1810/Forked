@@ -1,43 +1,9 @@
-import { Chess, normalizeMove } from 'chessops/chess'
-import { makeFen } from 'chessops/fen'
-import { parseUci } from 'chessops/util'
-import { moveAccuracyPct, gameAccuracies } from './accuracy.js'
-import { openingFamily } from './aggregates.js'
-import { gamePhases, type GamePhase } from './phases.js'
-import { matchOpening } from './openings.js'
-import { finalStatus } from './pgn.js'
-import type { EngineRecord, GameRecord } from './schemas.js'
-import { moverWinPct } from './win.js'
+import { moveAccuracyPct } from './accuracy.js'
+import { outcomeFor } from './player.js'
+import { userMoves, fenBeforePly, walkGame, type AnalyzedGame, type UserMove } from './walk.js'
 
-// One analyzed game: the game record joined with its engine record. This is
-// the finalizer's input. userColor null means a PGN paste with no matched
-// player; such games contribute to nothing user-specific.
-export interface AnalyzedGame {
-  gameId: string
-  userColor: 'white' | 'black' | null
-  game: GameRecord
-  record: EngineRecord
-}
-
-// One of the user's own non-book moves, enriched with everything the insight
-// functions need. Book moves are excluded up front, matching classification.
-export interface UserMove {
-  gameId: string
-  ply: number
-  phase: GamePhase
-  played: string
-  best: string
-  lossPct: number
-  wpBefore: number
-  wpAfter: number
-  classification: EngineRecord['plies'][number]['classification']
-  clockAfter: number | null
-  date: string | null
-  family: string
-  opponent: string
-  won: boolean
-  lost: boolean
-}
+export type { AnalyzedGame, UserMove } from './walk.js'
+export { userMoves, fenBeforePly } from './walk.js'
 
 const TIME_BUCKETS = [
   { label: '<10s', lo: 0, hi: 10 },
@@ -45,73 +11,6 @@ const TIME_BUCKETS = [
   { label: '30-60s', lo: 30, hi: 60 },
   { label: '60s+', lo: 60, hi: Infinity },
 ] as const
-
-// Replays the move list to the position BEFORE ply p (1-indexed) and returns
-// its FEN, for board diagrams on the flex and worst-blunder slides. Falls back
-// to the start position if a stored move is unreplayable (should not happen;
-// the same list already replayed cleanly at ingest).
-export function fenBeforePly(uciMoves: readonly string[], ply: number): string {
-  const pos = Chess.default()
-  for (let i = 0; i < ply - 1 && i < uciMoves.length; i++) {
-    const raw = parseUci(uciMoves[i])
-    const move = raw && normalizeMove(pos, raw)
-    if (!move || !pos.isLegal(move)) break
-    pos.play(move)
-  }
-  return makeFen(pos.toSetup())
-}
-
-function opponentName(g: AnalyzedGame): string {
-  if (g.userColor === 'white') return g.game.black.name
-  if (g.userColor === 'black') return g.game.white.name
-  return g.game.black.name
-}
-
-// The user's own non-book moves across one game, each carrying its
-// win-probability loss, phase, clock, and outcome context. This single walk
-// is the basis of every downstream insight.
-export function userMoves(g: AnalyzedGame): UserMove[] {
-  if (!g.userColor) return []
-  const out: UserMove[] = []
-  const bookPlies = matchOpening(g.record.uciMoves)?.plies ?? 0
-  const phases = gamePhases(g.record.uciMoves, bookPlies)
-  const terminal = finalStatus(g.record.uciMoves)
-  const family = openingFamily(g.game.eco, g.game.openingName)
-  const opponent = opponentName(g)
-  const won = g.game.result === (g.userColor === 'white' ? '1-0' : '0-1')
-  const lost = g.game.result === (g.userColor === 'white' ? '0-1' : '1-0')
-  let before = g.record.startEval
-  for (const p of g.record.plies) {
-    const mover = p.ply % 2 === 1 ? 'white' : 'black'
-    const wpBefore = moverWinPct(before, mover)
-    const wpAfter =
-      p.evalAfter === null
-        ? terminal === 'checkmate'
-          ? 100
-          : 50
-        : moverWinPct(p.evalAfter, mover)
-    if (p.evalAfter !== null) before = p.evalAfter
-    if (mover !== g.userColor || p.book) continue
-    out.push({
-      gameId: g.gameId,
-      ply: p.ply,
-      phase: phases[p.ply - 1],
-      played: p.played,
-      best: p.best,
-      lossPct: Math.max(0, wpBefore - wpAfter),
-      wpBefore,
-      wpAfter,
-      classification: p.classification,
-      clockAfter: g.game.clocks[p.ply - 1] ?? null,
-      date: g.game.date,
-      family,
-      opponent,
-      won,
-      lost,
-    })
-  }
-  return out
-}
 
 interface RateRow {
   key: string
@@ -184,7 +83,7 @@ export function computeInsights(games: readonly AnalyzedGame[]): Insights {
   const totalPositions = games.reduce((n, g) => n + g.record.plies.length, 0)
 
   const perGameAcc = userGames.flatMap((g) => {
-    const a = gameAccuracies(g.record, finalStatus(g.record.uciMoves))[g.userColor as 'white' | 'black']
+    const a = walkGame(g).accuracies[g.userColor as 'white' | 'black']
     return a === null ? [] : [{ g, accuracy: a }]
   })
   const overallAccuracy = accOf(allMoves)
@@ -230,7 +129,7 @@ export function computeInsights(games: readonly AnalyzedGame[]): Insights {
   // across games. Keyed by the move list prefix so identical positions collide.
   const mistakes = new Map<string, { move: string; ply: number; count: number; gameId: string }>()
   for (const g of userGames) {
-    for (const m of userMoves(g)) {
+    for (const m of walkGame(g).moves) {
       if (m.classification !== 'blunder') continue
       const prefix = g.record.uciMoves.slice(0, m.ply - 1).join(' ')
       const key = `${prefix}|${m.played}`
@@ -259,11 +158,12 @@ export function computeInsights(games: readonly AnalyzedGame[]): Insights {
   const flexCandidates = flexPool.length ? flexPool : perGameAcc
   if (flexCandidates.length) {
     const best = flexCandidates.reduce((a, b) => (b.accuracy > a.accuracy ? b : a))
-    const brilliancies = userMoves(best.g).filter((m) => m.played === m.best && m.wpBefore < 85)
+    const bestWalk = walkGame(best.g)
+    const brilliancies = bestWalk.moves.filter((m) => m.played === m.best && m.wpBefore < 85)
     const shown = brilliancies.length ? brilliancies[brilliancies.length - 1] : null
     flex = {
       gameId: best.g.gameId,
-      opponent: opponentName(best.g),
+      opponent: bestWalk.opponent,
       accuracy: best.accuracy,
       move: shown?.played ?? null,
       ply: shown?.ply ?? null,
@@ -277,26 +177,23 @@ export function computeInsights(games: readonly AnalyzedGame[]): Insights {
   {
     let worst: { g: AnalyzedGame; m: UserMove } | null = null
     for (const g of userGames) {
-      for (const m of userMoves(g)) {
+      for (const m of walkGame(g).moves) {
         if (!worst || m.lossPct > worst.m.lossPct) worst = { g, m }
       }
     }
     if (worst && worst.m.lossPct > 0) {
       const { g, m } = worst
       const cliff: number[] = []
-      // Six plies of White-perspective win% straddling the blunder.
-      let ev = g.record.startEval
-      const series: number[] = [moverWinPct(ev, 'white')]
-      for (const p of g.record.plies) {
-        if (p.evalAfter !== null) ev = p.evalAfter
-        series.push(moverWinPct(ev, 'white'))
-      }
+      // Six plies of White-perspective win% straddling the blunder, read off
+      // the game walk (one series per game, computed once).
+      const worstWalk = walkGame(g)
+      const series = worstWalk.whiteWinSeries
       for (let i = Math.max(0, m.ply - 2); i <= Math.min(series.length - 1, m.ply + 2); i++) {
         cliff.push(Math.round(series[i]))
       }
       worstBlunder = {
         gameId: g.gameId,
-        opponent: opponentName(g),
+        opponent: worstWalk.opponent,
         ply: m.ply,
         move: m.played,
         lossPct: Math.round(m.lossPct),
@@ -339,17 +236,16 @@ export function computeInsights(games: readonly AnalyzedGame[]): Insights {
   // Per-game rows for the dashboard's game list. Computed once here so the
   // dashboard is a single read rather than a per-game join at page load.
   const gameRows: GameRow[] = userGames.map((g) => {
-    const ms = userMoves(g)
-    const acc = gameAccuracies(g.record, finalStatus(g.record.uciMoves))[g.userColor as 'white' | 'black']
+    const walk = walkGame(g)
+    const ms = walk.moves
+    const acc = walk.accuracies[g.userColor as 'white' | 'black']
     const worst = ms.reduce<UserMove | null>((a, m) => (!a || m.lossPct > a.lossPct ? m : a), null)
-    const opponent = g.userColor === 'white' ? g.game.black.name : g.game.white.name
-    const won = g.game.result === (g.userColor === 'white' ? '1-0' : '0-1')
-    const lost = g.game.result === (g.userColor === 'white' ? '0-1' : '1-0')
+    const opponent = walk.opponent
     return {
       gameId: g.gameId,
       date: g.game.date,
       opponent,
-      result: won ? 'w' : lost ? 'l' : g.game.result === '1/2-1/2' ? 'd' : '?',
+      result: outcomeFor(g.game.result, g.userColor),
       accuracy: acc,
       worstMove: worst && worst.classification !== 'none' ? worst.played : null,
       plies: g.record.plies.length,

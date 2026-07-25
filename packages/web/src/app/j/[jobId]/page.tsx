@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { copy, pickTeaser } from '../../../copy'
 import { Story } from '../../../components/Story'
 import { getJob, type JobView } from '../../../lib/api'
+import { poll } from '../../../lib/poll'
 import { CountUp } from '../../../components/bits/CountUp'
 import { FadeContent } from '../../../components/bits/FadeContent'
 import { Noise } from '../../../components/bits/Noise'
@@ -43,27 +44,20 @@ export default function Progress({ params }: { params: Promise<{ jobId: string }
   // change mid-flight.
   useEffect(() => {
     if (terminal) return
-    let stop = false
-    let timer: ReturnType<typeof setTimeout>
-    const startedAt = Date.now()
-    async function poll() {
-      const j = await getJob(jobId).catch(() => null)
-      if (stop) return
-      if (j) {
-        nullStreakRef.current = 0
-        setJob(j)
-      } else {
-        nullStreakRef.current += 1
-        if (nullStreakRef.current >= 3) setMissing(true)
-      }
-      if (stop) return
-      timer = setTimeout(poll, Date.now() - startedAt > 60_000 ? 5000 : 2000)
-    }
-    void poll()
-    return () => {
-      stop = true
-      clearTimeout(timer)
-    }
+    return poll(
+      () => getJob(jobId).catch(() => null),
+      (j) => {
+        if (j) {
+          nullStreakRef.current = 0
+          setJob(j)
+        } else {
+          nullStreakRef.current += 1
+          if (nullStreakRef.current >= 3) setMissing(true)
+        }
+        return 'again'
+      },
+      (elapsed) => (elapsed > 60_000 ? 5000 : 2000),
+    )
   }, [jobId, terminal])
 
   // One rotating status line on a 4-second cadence. The teaser slot replaces

@@ -20,14 +20,26 @@ import {
   type Motif,
 } from '@forked/shared'
 import { Board } from '../../../../../components/Board'
-import { TIER, TierIcon, tierTint } from '../../../../../components/classification'
+import { TIER, TierIcon } from '../../../../../components/classification'
 import { EvalBar } from '../../../../../components/EvalBar'
 import { CoachCard, EvalGraph, MoveList } from '../../../../../components/EvalGraph'
 import { EngineLines } from '../../../../../components/EngineLines'
 import { copy, formatDate, phaseLabels } from '../../../../../copy'
 import { getGameReport, getJob, type GameReport } from '../../../../../lib/api'
+import { poll } from '../../../../../lib/poll'
 import { LiveEngine, type EngineUpdate } from '../../../../../lib/engine'
 import { clickMove, destsFor, terminalEval } from '../../../../../lib/moves'
+import {
+  boardDecorations,
+  branchFen as computeBranchFen,
+  branchParentFen as computeBranchParentFen,
+  estimatedElo,
+  isMainlineStep,
+  shownEval as computeShownEval,
+  stepTo,
+  type Branch,
+  type LastLive,
+} from '../../../../../lib/review-session'
 
 // Rows always shown in the summary table even at zero, matching chess.com's
 // convention of always naming the headline tiers.
@@ -67,12 +79,6 @@ function motifLine(m: Motif | null): string | null {
     case 'best-capture':
       return copy.coach.bestWasTake(m.piece, m.square)
   }
-}
-
-// Plain +/-1 stepping, shared by the toolbar buttons and the arrow-key
-// handler. ArrowLeft from move 1 steps to the start position (null).
-function stepTo(current: number | null, dir: 1 | -1, total: number): number | null {
-  return dir === 1 ? Math.min(total, (current ?? 0) + 1) : current === null || current <= 1 ? null : current - 1
 }
 
 // The single-game wait (~10s): the status line plus an indeterminate sweep
@@ -174,17 +180,6 @@ function SummaryCard({
   )
 }
 
-// Game-performance rating estimated from move accuracy. Heuristic power fit,
-// exponent 5, recalibrated against a real chess.com Game Review side-by-side
-// (Apertito vs Akshx999, 17 Jul 26): 64.7% -> ~350, 57% -> ~190 matched
-// chess.com's 500/150; 90% -> ~1830, 99% -> ~2950 anchor the top end.
-// ponytail: accuracy-only estimate; blend in opponent rating and game length
-// if it ever needs to be defensible.
-function estimatedElo(accuracy: number): number {
-  const elo = 3100 * Math.pow(Math.min(accuracy, 100) / 100, 5)
-  return Math.max(100, Math.round(elo / 10) * 10)
-}
-
 // Live branch mode's coach-card slot (Wave 2): swaps in while a branch is
 // active. Same fixed-height .coach-card slot as CoachCard/SummaryCard (the
 // class, not a variant), so the toolbar below never shifts on entry. Just the
@@ -221,7 +216,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // plies of the mainline stay fixed once the branch starts; `moves` grows
   // from there. `boardSel` is the in-progress piece-then-destination click
   // state (clickMove).
-  const [branch, setBranch] = useState<{ base: number; moves: string[] } | null>(null)
+  const [branch, setBranch] = useState<Branch | null>(null)
   const [boardSel, setBoardSel] = useState<string | null>(null)
   // Live badge for the last branch move (Task 6), judged once the live
   // engine reaches depth >= 12 on the resulting position.
@@ -236,7 +231,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // move is played; if it doesn't match the position being moved from (the
   // engine hasn't reached MIN_DEPTH there yet), that means there's no known
   // eval for that position and playUserMove must not guess one.
-  const lastLiveRef = useRef<{ fen: string; eval: Eval; bestUci: string | null } | null>(null)
+  const lastLiveRef = useRef<LastLive | null>(null)
   const [engineStatus, setEngineStatus] = useState<'off' | 'loading' | 'ready' | 'failed'>('off')
   const [liveUpdate, setLiveUpdate] = useState<EngineUpdate | null>(null)
   const engineRef = useRef<LiveEngine | null>(null)
@@ -270,56 +265,43 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // for over a minute — recursive setTimeout (not setInterval) so the delay
   // can change mid-flight.
   useEffect(() => {
-    let stop = false
-    let timer: ReturnType<typeof setTimeout>
     notFoundStreakRef.current = 0
     netFailStreakRef.current = 0
-    const startedAt = Date.now()
-    function schedule() {
-      timer = setTimeout(tick, Date.now() - startedAt > 60_000 ? 5000 : 1500)
-    }
-    async function tick() {
-      const r = await getGameReport(jobId, gameId)
-      if (stop) return
-      if (r === 'notFound') {
-        notFoundStreakRef.current += 1
-        // Tolerate a creation race (the record can land a beat after the job
-        // reports this game) but stop polling a game/job pair that will
-        // never exist (~8 ticks, ~12s).
-        if (notFoundStreakRef.current >= 8) {
+    return poll(
+      () => getGameReport(jobId, gameId),
+      (r) => {
+        if (r === 'notFound') {
+          notFoundStreakRef.current += 1
+          // Tolerate a creation race (the record can land a beat after the job
+          // reports this game) but stop polling a game/job pair that will
+          // never exist (~8 ticks, ~12s).
+          if (notFoundStreakRef.current < 8) return 'again'
           setMissing(true)
-          return
+          return 'done'
         }
-        schedule()
-        return
-      }
-      notFoundStreakRef.current = 0
-      if (r === null) {
-        // K6: a network failure (distinct from the API's own 'notFound')
-        // used to just reschedule forever — count it toward the same kind
-        // of give-up as notFound, with its own error line.
-        netFailStreakRef.current += 1
-        if (netFailStreakRef.current >= 8) {
+        notFoundStreakRef.current = 0
+        if (r === null) {
+          // K6: a network failure (distinct from the API's own 'notFound')
+          // used to just reschedule forever — count it toward the same kind
+          // of give-up as notFound, with its own error line.
+          netFailStreakRef.current += 1
+          if (netFailStreakRef.current < 8) return 'again'
           setPollFailed(true)
-          return
+          return 'done'
         }
-        schedule()
-        return
-      }
-      netFailStreakRef.current = 0
-      if (r.record) {
-        setReport(r)
-      } else if (r.status === 'failed') {
-        setMissing(true)
-      } else {
-        schedule()
-      }
-    }
-    void tick()
-    return () => {
-      stop = true
-      clearTimeout(timer)
-    }
+        netFailStreakRef.current = 0
+        if (r.record) {
+          setReport(r)
+          return 'done'
+        }
+        if (r.status === 'failed') {
+          setMissing(true)
+          return 'done'
+        }
+        return 'again'
+      },
+      (elapsed) => (elapsed > 60_000 ? 5000 : 1500),
+    )
   }, [jobId, gameId])
 
   const record = report?.record ?? null
@@ -366,21 +348,18 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // derivation below (which needs the post-guard `record`) so it can be read
   // by the shownFen memo unconditionally, before the loading/missing early
   // returns.
-  const branchFen = useMemo(() => {
+  const branchFenValue = useMemo(() => {
     if (!branch || !record) return null
-    return fenBeforePly(
-      [...record.uciMoves.slice(0, branch.base), ...branch.moves],
-      branch.base + branch.moves.length + 1,
-    )
+    return computeBranchFen(record, branch)
   }, [branch, record])
 
   // The position the board is showing (mainline or branch). The engine
   // analyzes it whenever engine output is visible — always.
   const shownFen = useMemo(() => {
     if (!record) return null
-    if (branch && branchFen) return branchFen
+    if (branch && branchFenValue) return branchFenValue
     return fenBeforePly(record.uciMoves, (selected ?? 0) + 1)
-  }, [record, branch, branchFen, selected])
+  }, [record, branch, branchFenValue, selected])
 
   // Start the engine as soon as the record lands (always-on live analysis).
   useEffect(() => {
@@ -445,7 +424,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     // below would never run for the branch move that ends the game. Checkmate
     // badges the mating move 'best' directly; stalemate gets no badge.
     if (liveUpdate?.terminal) {
-      const tEval = branchFen ? terminalEval(branchFen) : null
+      const tEval = branchFenValue ? terminalEval(branchFenValue) : null
       setBranchBadge(tEval?.type === 'mate' ? { square: pending.uci.slice(2, 4), kind: 'best' } : null)
       return
     }
@@ -531,82 +510,24 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
 
   const fen: string = shownFen!
 
-  // FIX 1b: the branch position one ply back — the parent of the LAST branch
-  // move — used below to find a still-valid live eval while the new
-  // position's own search hasn't produced one yet. Same fenBeforePly(array,
-  // array.length + 1) pattern as branchFen above, just one move shorter.
-  const branchParentFen = branch
-    ? fenBeforePly(
-        [...record.uciMoves.slice(0, branch.base), ...branch.moves.slice(0, -1)],
-        branch.base + branch.moves.length,
-      )
-    : null
+  // FIX 1b: the branch position one ply back — used below to find a
+  // still-valid live eval while the new position's own search hasn't
+  // produced one yet.
+  const branchParentFenValue = branch ? computeBranchParentFen(record, branch) : null
 
-  // The eval shown on the bar: the live engine's read of the shown position,
-  // once it has one. Otherwise (no live update yet, or engine failed) the
-  // latest non-null stored eval at or before the selected ply (terminal
-  // mate/stalemate plies store null), else the start.
-  let shownEval: Eval
-  // FIX 3: a terminal update has no lines[0] — fall through to the stored
-  // eval instead of crashing on liveUpdate.lines[0].eval.
-  if (liveUpdate?.lines[0]) {
-    shownEval = liveUpdate.lines[0].eval
-  } else if (branch && liveUpdate?.terminal) {
-    // FIX 1a: the mainline stored-eval fallback below is for `selected`'s
-    // position (the branch BASE) — showing it here would put a stale eval on
-    // the bar permanently, contradicting a mated/stalemated branch position.
-    // `fen` already equals the branch's own position (shownFen resolves to
-    // branchFen while a branch is active), so read the eval off it directly.
-    shownEval = terminalEval(fen) ?? { type: 'cp', value: 0 }
-  } else if (branch && !liveUpdate && lastLiveRef.current?.fen === branchParentFen) {
-    // FIX 1b: the engine hasn't produced an update for the new branch
-    // position yet — hold the last real eval it produced for the position
-    // one branch-move back, instead of snapping to the mainline base's
-    // stored eval (a different position N branch-moves shallower).
-    shownEval = lastLiveRef.current.eval
-  } else {
-    shownEval = record.startEval
-    if (selected !== null) {
-      for (let i = selected - 1; i >= 0; i--) {
-        const e = record.plies[i]?.evalAfter
-        if (e) {
-          shownEval = e
-          break
-        }
-      }
-    }
-  }
-
-  let badge: { square: string; kind: Enriched } | undefined
-  let lastMove: { from: string; to: string } | undefined
-  let tint: string | undefined
-  let arrows: { from: string; to: string; color: string }[] | undefined
-
-  if (branch) {
-    // Badge is the live judgment of the last branch move (see the judging
-    // effect above), resolved once depth >= 12 lands — undefined (no badge,
-    // no tint override) until then, which falls back to Board's default
-    // neutral yellow last-move glow.
-    const last = branch.moves[branch.moves.length - 1]
-    if (last) lastMove = { from: last.slice(0, 2), to: last.slice(2, 4) }
-    badge = branchBadge ?? undefined
-    tint = branchBadge ? tierTint(branchBadge.kind) : undefined
-    if (liveUpdate?.lines[0]?.pvUci[0]) {
-      const pv0 = liveUpdate.lines[0].pvUci[0]
-      arrows = [{ from: pv0.slice(0, 2), to: pv0.slice(2, 4), color: 'var(--best)' }]
-    }
-  } else if (ply) {
-    const dest = ply.played.slice(2, 4)
-    badge = tier !== 'none' ? { square: dest, kind: tier } : undefined
-    lastMove = { from: ply.played.slice(0, 2), to: dest }
-    tint = tier !== 'none' ? tierTint(tier) : undefined
-    // Stockfish's recommendation on every ply where something better existed
-    // (not just the bad tiers) — book moves excepted, and no arrow when the
-    // played move already was the best one.
-    if (ply.best !== ply.played && !ply.book) {
-      arrows = [{ from: ply.best.slice(0, 2), to: ply.best.slice(2, 4), color: 'var(--best)' }]
-    }
-  }
+  // The eval shown on the bar, and the board overlays (badge/last-move/tint/
+  // arrows) for the shown position — see review-session.ts for the fallback
+  // chain and per-mode decorations.
+  const shownEval: Eval = computeShownEval({
+    record,
+    selected,
+    branch,
+    fen,
+    liveUpdate,
+    lastLive: lastLiveRef.current,
+    branchParentFen: branchParentFenValue,
+  })
+  const { badge, lastMove, tint, arrows } = boardDecorations({ branch, branchBadge, liveUpdate, ply, tier })
 
   const top = flip ? game.white : game.black
   const bottom = flip ? game.black : game.white
@@ -647,7 +568,7 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
     // the branch. ponytail: fast successive moves go unbadged rather than
     // mis-badged — no guessing when the engine hasn't caught up to `fen` yet.
     const live = lastLiveRef.current?.fen === fen ? lastLiveRef.current : null
-    if (!branch && uci === record.uciMoves[selected ?? 0]) {
+    if (isMainlineStep(record, selected, branch, uci)) {
       // Stepping the mainline forward — that ply already has a stored
       // classification (rendered outside branch mode), so any live judgment
       // in flight belongs to a branch move that no longer exists.

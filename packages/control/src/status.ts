@@ -1,5 +1,5 @@
 import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
-import { cacheItemKey, gameKey, jobKey } from '@forked/shared'
+import { cacheItemKey, gameKey, jobKey, playerColor } from '@forked/shared'
 import type { Deps } from '@forked/worker'
 import type { ArchiveGame, ChessCom } from './chesscom.js'
 
@@ -110,12 +110,7 @@ function toRow(g: ArchiveGame, uname: string): GameListRow {
   // Finish date (from end_time), so the column is monotonic with the newest-first
   // sort and matches how chess.com groups a month; PGN date only as a fallback.
   const date = g.endTime ? new Date(g.endTime * 1000).toISOString().slice(0, 10) : (p?.date ?? null)
-  const userColor =
-    p && p.white.name.toLowerCase() === uname
-      ? 'white'
-      : p && p.black.name.toLowerCase() === uname
-        ? 'black'
-        : null
+  const userColor = p ? playerColor(p, uname) : null
   return {
     id: g.id,
     endTime: g.endTime,

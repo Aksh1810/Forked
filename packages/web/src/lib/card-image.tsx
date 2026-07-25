@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og'
+import { cliffIndex } from '@forked/shared'
 import type { WrappedSummary } from './api'
 
 // Server-rendered shareable card, the same content and tokens as the on-page
@@ -25,15 +26,7 @@ export type CardSize = keyof typeof CARD_SIZES
 // A div-based win% sparkline (satori renders flexbox, not arbitrary SVG paths):
 // one bar per point, the steepest drop tinted with the accent.
 function Cliff({ series, height }: { series: number[]; height: number }) {
-  let dropAt = 1
-  let biggest = 0
-  for (let i = 1; i < series.length; i++) {
-    const d = Math.abs(series[i] - series[i - 1])
-    if (d > biggest) {
-      biggest = d
-      dropAt = i
-    }
-  }
+  const dropAt = cliffIndex(series)
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height, width: '100%' }}>
       {series.map((v, i) => (

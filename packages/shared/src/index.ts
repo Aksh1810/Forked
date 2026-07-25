@@ -44,6 +44,7 @@ export {
   type UserMove,
   type Insights,
 } from './insights.js'
+export { walkGame, type GameWalk } from './walk.js'
 export {
   archetype,
   computeArchetypeFeatures,
@@ -65,7 +66,7 @@ export {
   type EngineRecord,
   type GameRecord,
 } from './schemas.js'
-export { winPctFromCp, whiteWinPct, moverWinPct } from './win.js'
+export { winPctFromCp, whiteWinPct, moverWinPct, cliffIndex } from './win.js'
 export {
   classifyWinPctSwing,
   classifyLive,
@@ -89,3 +90,5 @@ export {
   type PgnRejectionCode,
 } from './pgn.js'
 export { normalizeUsername } from './username.js'
+export { playerColor, outcomeFor, type Outcome, type Sides } from './player.js'
+export { parseUciInfo, sideToMove, type UciInfo } from './uci.js'

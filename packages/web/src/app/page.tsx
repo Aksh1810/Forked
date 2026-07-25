@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { normalizeUsername } from '@forked/shared'
 import { copy } from '../copy'
 import { getPositionsJudged, postIngest } from '../lib/api'
+import { poll } from '../lib/poll'
 import { ClickSpark } from '../components/bits/ClickSpark'
 import { ShinyText } from '../components/bits/ShinyText'
 import { CountUp } from '../components/bits/CountUp'
@@ -164,21 +165,19 @@ export default function Landing() {
 function Ticker() {
   const [n, setN] = useState<number | null>(null)
 
-  useEffect(() => {
-    let stop = false
-    async function poll() {
-      // K10: skip the fetch entirely while the tab isn't visible.
-      if (document.hidden) return
-      const v = await getPositionsJudged()
-      if (!stop && v !== null) setN(v)
-    }
-    void poll()
-    const iv = setInterval(poll, 5000)
-    return () => {
-      stop = true
-      clearInterval(iv)
-    }
-  }, [])
+  useEffect(
+    () =>
+      poll(
+        // K10: skip the fetch entirely while the tab isn't visible.
+        () => (document.hidden ? Promise.resolve(null) : getPositionsJudged()),
+        (v) => {
+          if (v !== null) setN(v)
+          return 'again'
+        },
+        () => 5000,
+      ),
+    [],
+  )
 
   return (
     <p className="mono ticker">
