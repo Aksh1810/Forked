@@ -21,6 +21,7 @@ import {
   type Motif,
 } from '@forked/shared'
 import { Board } from '../../../../../components/Board'
+import { CheckmateFx } from '../../../../../components/CheckmateFx'
 import { TIER, TierIcon } from '../../../../../components/classification'
 import { EvalBar } from '../../../../../components/EvalBar'
 import { CoachCard, EvalGraph, MoveList } from '../../../../../components/EvalGraph'
@@ -549,6 +550,12 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   const lostGame =
     (report.userColor === 'white' && game.result === '0-1') ||
     (report.userColor === 'black' && game.result === '1-0')
+  // Checkmate flourish: on a checkmate the side that just moved delivered it,
+  // so the last ply's mover is the winner. Fires only when the viewer is
+  // actually looking at the final (mating) position.
+  const mateWinner: 'white' | 'black' = total % 2 === 1 ? 'white' : 'black'
+  const showMateFx =
+    terminal === 'checkmate' && !branch && selected === total && report.userColor !== null
   const ply = coach?.p ?? null
   const tier: Enriched = selected !== null ? enriched[selected - 1] ?? 'none' : 'none'
 
@@ -648,6 +655,9 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
 
   return (
     <main className="dash report">
+      {showMateFx && (
+        <CheckmateFx key={selected} outcome={report.userColor === mateWinner ? 'win' : 'loss'} />
+      )}
       {/* E4: .dash-head instead of a bespoke inline flex — same layout every
           other dashboard-style page header already uses. */}
       <header className="dash-head">

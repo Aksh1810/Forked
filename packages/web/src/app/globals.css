@@ -256,6 +256,85 @@ kbd {
   background: var(--bone);
 }
 
+/* Checkmate flourish overlay (win = confetti, loss = somber vignette). Fixed
+   and non-interactive so it never blocks the board. */
+.fx-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+}
+.fx-confetti {
+  position: absolute;
+  top: -8vh;
+  border-radius: 1px;
+  animation-name: fx-confetti-fall;
+  animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+}
+@keyframes fx-confetti-fall {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translate(var(--drift, 0), 112vh) rotate(var(--spin, 540deg)); opacity: 0; }
+}
+.fx-win-text {
+  position: absolute;
+  top: 24%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: clamp(2rem, 1rem + 5vw, 4rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--bone);
+  text-shadow: 0 0 40px color-mix(in srgb, var(--best) 40%, transparent);
+  animation: fx-pop 500ms cubic-bezier(0.2, 1.4, 0.3, 1) both, fx-fadeout 600ms ease 2600ms both;
+}
+@keyframes fx-pop {
+  0% { opacity: 0; transform: scale(0.7); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes fx-fadeout {
+  to { opacity: 0; }
+}
+/* Loss: a dark vignette closes in from the edges, one somber word settles. */
+.fx-loss-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 70% at 50% 45%, transparent 40%, color-mix(in srgb, var(--blunder) 22%, rgba(0, 0, 0, 0.72)) 100%);
+  animation: fx-loss-in 600ms ease both, fx-fadeout 700ms ease 1900ms both;
+}
+@keyframes fx-loss-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fx-loss-text {
+  position: absolute;
+  top: 40%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: clamp(1.75rem, 1rem + 4vw, 3.25rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  animation: fx-loss-drop 700ms ease both, fx-fadeout 700ms ease 1900ms both;
+}
+@keyframes fx-loss-drop {
+  0% { opacity: 0; transform: translateY(-14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+/* Reduced motion: keep the cue, drop the motion. */
+.fx-static .fx-win-text,
+.fx-static .fx-loss-text,
+.fx-static .fx-loss-vignette {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
 /* Top metrics strip on the review board: accuracy + key counts per player,
    the viewer's side ringed. Two facing cells (black mirrored right). */
 .review-metrics {

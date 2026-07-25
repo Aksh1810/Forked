@@ -166,6 +166,9 @@ export const copy = {
     outcomeStalemate: 'Stalemate — a draw.',
     outcomeResult: (winner: string, result: string) => `${winner} wins ${result}.`,
     outcomeDraw: 'A draw.',
+    // Terminal-checkmate flourish (CheckmateFx overlay).
+    endWin: 'You won',
+    endLoss: 'Checkmated',
     analyzeAnother: 'Analyze another game →',
     // "The moment you lost": the cinematic replay of the game's turning point.
     // Roasts target the move and the situation, never the player.
