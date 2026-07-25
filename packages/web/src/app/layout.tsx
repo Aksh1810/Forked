@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react'
-import { Bricolage_Grotesque, IBM_Plex_Mono, Instrument_Sans } from 'next/font/google'
+import { Space_Grotesk, IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google'
 import Link from 'next/link'
 import { BRAND_NAME } from '@forked/shared'
 import { copy } from '../copy'
 import './globals.css'
 
-const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display' })
-const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body' })
+const display = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' })
+const body = IBM_Plex_Sans({ subsets: ['latin'], weight: ['400', '500', '600'], variable: '--font-body' })
 const mono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-mono' })
 
 const siteOrigin = process.env.NEXT_PUBLIC_SITE_ORIGIN ?? 'http://localhost:3000'

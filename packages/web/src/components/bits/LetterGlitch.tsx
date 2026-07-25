@@ -13,11 +13,13 @@ export function LetterGlitch({
   tickMs = 120,
   fontSize = 14,
   opacity = 0.06,
+  glyphs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!#$&',
 }: {
   colors?: string[]
   tickMs?: number
   fontSize?: number
   opacity?: number
+  glyphs?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const enabled = !usePrefersReducedMotion()
@@ -27,7 +29,6 @@ export function LetterGlitch({
     const ctx = canvas?.getContext('2d')
     if (!enabled || !canvas || !ctx) return
 
-    const glyphs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!#$&'
     const cw = fontSize * 0.9
     const ch = fontSize * 1.4
     let cols = 0
@@ -77,7 +78,7 @@ export function LetterGlitch({
       cancelAnimationFrame(resizeRaf)
       window.removeEventListener('resize', onResize)
     }
-  }, [enabled, colors, tickMs, fontSize])
+  }, [enabled, colors, tickMs, fontSize, glyphs])
 
   if (!enabled) return null
   return <canvas ref={canvasRef} className="bits-bg-layer" style={{ opacity }} aria-hidden />

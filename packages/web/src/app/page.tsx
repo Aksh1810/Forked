@@ -10,7 +10,7 @@ import { poll } from '../lib/poll'
 import { ClickSpark } from '../components/bits/ClickSpark'
 import { ShinyText } from '../components/bits/ShinyText'
 import { CountUp } from '../components/bits/CountUp'
-import { DotGrid } from '../components/bits/DotGrid'
+import { LetterGlitch } from '../components/bits/LetterGlitch'
 import { SplitText } from '../components/bits/SplitText'
 import { Magnet } from '../components/bits/Magnet'
 import { FadeContent } from '../components/bits/FadeContent'
@@ -63,7 +63,12 @@ export default function Landing() {
 
   return (
     <main className="flow">
-      <DotGrid />
+      <LetterGlitch
+        colors={['#2b4539', '#61dca3', '#61b3dc']}
+        opacity={0.4}
+        fontSize={22}
+        glyphs="♔♕♖♗♘♙♚♛♜♝♞♟"
+      />
       {/* D2: ClickSpark wraps only the hero heading now — it used to wrap the
           whole page, so any click anywhere sparked. */}
       <ClickSpark>
