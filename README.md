@@ -10,7 +10,10 @@ archetype.
 
 The review board is the everyday surface: classified moves, coach commentary,
 an eval graph, and a second Stockfish running in your browser so you can grab
-a piece and explore any variation with live evaluation. The archive is the
+a piece and explore any variation with live evaluation. Every game also has a
+one-screen "moment you lost" — the single ply where your win probability fell
+off a cliff, replayed with the move you played, the move you missed, and the
+reply that punished it. The archive is the
 part nothing else does: server-side, fanned out across a worker pool, the same
 engine depth whether you open it from a workstation or a phone, incremental
 re-syncs served from a content-addressed cache, and the whole thing open
@@ -175,6 +178,7 @@ npm run typecheck
 npm run synth       # cdk synth of the control stack, Docker-free
 
 # local stack, no Docker:
+node scripts/local/dev.mjs              # all four of the below, Ctrl-C stops everything
 node scripts/local/jvm-stack.mjs up     # dynamodb-local :8000, elasticmq :9324
 npm run api -w packages/control         # control API :8787
 node packages/worker/dist/main.js       # a worker (repeat for more)
