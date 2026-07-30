@@ -166,8 +166,8 @@ export async function ingest(
 }
 
 // Daily counter on the (who, ip) pair; throws ConditionalCheckFailedException
-// past the cap. Exported so other unauthenticated write endpoints (the
-// leaderboard opt-out) share the same limiter.
+// past the cap. Exported so the other unauthenticated endpoints (the games
+// browse list) share the same limiter.
 export async function bumpRate(deps: Deps, who: string, ip: string, max: number): Promise<void> {
   const day = new Date().toISOString().slice(0, 10)
   await deps.ddb.send(

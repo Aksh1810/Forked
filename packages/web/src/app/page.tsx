@@ -157,9 +157,6 @@ export default function Landing() {
       </div>
 
       <Ticker />
-      <p>
-        <Link href="/leaderboard">{copy.leaderboard}</Link>
-      </p>
       <footer className="footer">
         Powered by Stockfish. Open source. <Link href="/about">About</Link>
       </footer>

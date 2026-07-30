@@ -33,9 +33,6 @@ Notes for running the public instance. None of this applies to self-hosters.
   to slower, not broken.
 - Provisioned capacity is the backstop: overload throttles and alarms, it
   never bills.
-- To de-list a leaderboard entry (someone else's request, moderation, etc.):
-  `curl -X POST <ApiUrl>/leaderboard/remove -H 'content-type: application/json' -d '{"username":"..."}'`.
-  Removal is permanent across re-analyses.
 
 ## Hygiene
 

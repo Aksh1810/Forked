@@ -150,53 +150,6 @@ export async function getJob(jobId: string, failures = false): Promise<JobView |
   return r === 'notFound' ? null : r
 }
 
-export interface LeaderUser {
-  username: string
-  accuracy: number
-  games: number
-  archetype: { key: string; name: string; mark: string }
-}
-
-export interface LeaderBlunder {
-  username: string
-  jobId: string
-  gameId: string
-  opponent: string
-  move: string
-  ply: number
-  lossPct: number
-  fen: string
-  cliff: number[]
-}
-
-export interface Leaderboard {
-  users: LeaderUser[]
-  blunder: LeaderBlunder | null
-}
-
-export async function getLeaderboard(): Promise<Leaderboard | null> {
-  try {
-    const res = await fetch(`${API_BASE}/leaderboard`, { cache: 'no-store' })
-    if (!res.ok) return null
-    return (await res.json()) as Leaderboard
-  } catch {
-    return null
-  }
-}
-
-export async function postLeaderboardRemove(username: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/leaderboard/remove`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username }),
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
 export async function getPositionsJudged(): Promise<number | null> {
   try {
     const res = await fetch(`${API_BASE}/metrics`)

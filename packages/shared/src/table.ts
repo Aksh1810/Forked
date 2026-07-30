@@ -16,15 +16,6 @@ export const rateKey = (username: string, ip: string, utcDate: string) => ({
   pk: `RATE#${username.toLowerCase()}#${ip}`,
   sk: `DAY#${utcDate}`,
 })
-// Leaderboard: one partition holds every ranked user plus the daily
-// blunder-of-the-day items, so the whole board reads as a single Query.
-// ponytail: hot-partition risk only matters at a scale this table won't see.
-export const leaderUserKey = (username: string) => ({
-  pk: 'LEADER',
-  sk: `USER#${username.toLowerCase()}`,
-})
-export const leaderBlunderKey = (utcDate: string) => ({ pk: 'LEADER', sk: `BLUNDER#${utcDate}` })
-
 // Sparse GSI: only jobs currently in analyzing status carry these attributes,
 // so the janitor's sweep reads nothing else.
 export const STATUS_GSI = 'gsi1'

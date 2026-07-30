@@ -26,9 +26,8 @@ counter and ring updates to job items do NOT replicate into the GSI; its
 | POST /ingest (N games) | N cache Gets (~N RCU) + 1 budget read | rate + lock + job (~5 WCU) + N game puts (~2-3 WCU each) | burst, once per job |
 | Worker game completion | job ring Get, cache Get (~3 RCU) | engine-record put (~5-10 WCU) + txn game+job (2x cost; up to ~15 WCU late in a big job as the job item grows) + metrics ADD + 2 GB-seconds ADDs (Lambda path) | ~0.05 games/s at concurrency 5 -> a few WCU/s worst case |
 | GET /job/:id poll | 1 Get (~1-2 RCU) | none | ~0.5-1 RCU/s per viewer at 2s |
-| Finalize (100 games) | full game Query + engine BatchGet (~100-200 RCU) | wrapped write (~6 WCU) + leaderboard Query + 2 conditional writes | burst, once per job |
+| Finalize (100 games) | full game Query + engine BatchGet (~100-200 RCU) | wrapped write (~6 WCU) | burst, once per job |
 | Janitor sweep | sparse GSI Query (~0 when healthy) | repairs only on drift | ~0 |
-| GET /leaderboard | 1 Query (~1-2 RCU) | none | per page view |
 | GET /metrics | 1 Get | none | per landing view |
 
 ## Gate (c) arithmetic: one 100-game job + one polling viewer

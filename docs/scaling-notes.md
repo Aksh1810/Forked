@@ -5,7 +5,7 @@ DeBrie, web.dev — sources linked in the session transcript). Implemented items
 marked; the rest are recommendations with triggers, deliberately NOT built yet.
 
 ## Already implemented (this session)
-- Cache-Control headers: leaderboard/metrics `public, s-maxage=60, stale-while-revalidate=300`,
+- Cache-Control headers: metrics `public, s-maxage=60, stale-while-revalidate=300`,
   job status `private, max-age=1` (control app.ts — takes effect on next deploy).
 - Job ETA: status payload returns `etaSeconds` from observed throughput; progress page
   shows "about N min left".

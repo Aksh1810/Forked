@@ -25,8 +25,6 @@ export {
   metricsKey,
   archiveKey,
   rateKey,
-  leaderUserKey,
-  leaderBlunderKey,
   STATUS_GSI,
   analyzingGsiAttrs,
 } from './table.js'

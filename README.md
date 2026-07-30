@@ -30,7 +30,6 @@ flowchart LR
   subgraph control [control plane, one Lambda behind one Function URL]
     I[ingest]
     ST[status reads]
-    LB[leaderboard]
   end
   subgraph workers [analysis fleets]
     W1[container workers]
@@ -103,8 +102,8 @@ cached record cannot — evaluate positions that were never played. Pick up a
 piece anywhere in the game and the branch you create is evaluated live at
 MultiPV 3, with the same classification badges the mainline gets. The stored
 per-ply classification is a deliberately coarse four-value enum
-(`blunder | mistake | inaccuracy | none`) that feeds insights and the
-leaderboard; the finer display tiers you actually see are derived at render
+(`blunder | mistake | inaccuracy | none`) that feeds insights and accuracy;
+the finer display tiers you actually see are derived at render
 time from the same record, so re-tuning the bands re-labels every
 already-analyzed game without re-running a single engine.
 
@@ -146,9 +145,6 @@ defeated per run so every game is a fresh analysis.
   data, and pasted PGNs are analyzed for whoever pasted them.
 - A job URL is an unguessable UUID capability: anyone you send the link to
   can see that story. Do not share the link if you do not want that.
-- The leaderboard shows public data (username, accuracy, games, archetype)
-  and anyone can remove any username from it, no account needed: the data is
-  public either way, and removal is the only write the endpoint allows.
 - Engine analysis is cached by move sequence, deliberately containing nothing
   about who played the moves. Clock data lives only in per-job game records.
 - No accounts, no cookies, no tracking. The only PII stored is what chess.com

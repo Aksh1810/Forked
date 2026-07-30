@@ -29,7 +29,10 @@ export const WrappedSummarySchema = z.strictObject({
   totalGames: z.number().int(),
   totalPositions: z.number().int(),
   accuracy: z.number().nullable(),
-  // Filled once leaderboard data supports it; omitted gracefully before.
+  // Always null since the leaderboard (its only ranked-population source)
+  // was removed. Kept in the schema because it is a strictObject: dropping
+  // the key would make every already-stored wrapped summary fail to parse.
+  // The story slide renders copy.story.accuracyNoPercentile for null.
   accuracyPercentile: z.number().nullable(),
   flex: BoardMomentSchema.extend({ accuracy: z.number() }).nullable(),
   worstBlunder: z

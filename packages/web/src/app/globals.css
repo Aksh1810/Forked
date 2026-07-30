@@ -581,6 +581,15 @@ kbd {
   margin: 16px 0 12px;
   font-size: 1.05rem;
 }
+/* The cliff sparkline is drawn at a fixed pixel width (it also renders into
+   the fixed-size share card, which is why the component keeps pixel props),
+   so this page has to tell it to shrink — at 320px its own box plus the page
+   gutter pans the whole page sideways. Satori reads only inline styles, so
+   this never reaches the card. */
+.moment > svg {
+  max-width: 100%;
+  height: auto;
+}
 .moment-outro {
   margin-top: 18px;
   animation: bits-enter 300ms ease both;
@@ -850,8 +859,7 @@ kbd {
 }
 
 /* G1: elevation ladder — a subtle top-light gradient instead of a flat fill
-   (border stays 1px --line for now; also picked up by podium cards, which
-   reuse .panel). */
+   (border stays 1px --line for now). */
 .panel {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1085,8 +1093,8 @@ tr.row-click {
 
 @media (max-width: 640px) {
   /* QA1: the mobile hide is scoped to .games-table-scroll (below), not every
-     .table-scroll — the leaderboard shares the class with no card fallback
-     and must stay visible, panning horizontally instead. */
+     .table-scroll — a wrapper with no card fallback must stay visible and pan
+     horizontally instead of vanishing. */
   .game-cards {
     display: block;
   }
@@ -1488,18 +1496,6 @@ tr.row-click {
   }
 }
 
-/* Leaderboard */
-.remove-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  max-width: 420px;
-  margin-top: 12px;
-}
-.remove-row .field {
-  flex: 1;
-}
-
 /* Wide tables pan inside their own scroll container; the page itself never
    scrolls sideways. */
 .table-scroll {
@@ -1509,9 +1505,9 @@ tr.row-click {
   min-width: 520px;
 }
 
-/* QA1: only the games list's table wrapper falls back to the .game-cards
-   list on mobile — the leaderboard shares .table-scroll but has no card
-   fallback, so it must stay visible and pan horizontally instead. */
+/* QA1: the games list's table wrapper falls back to the .game-cards list on
+   mobile; the class stays scoped to .games-table-scroll so any other
+   .table-scroll user keeps panning horizontally instead of vanishing. */
 @media (max-width: 640px) {
   .games-table-scroll {
     display: none;
@@ -1897,44 +1893,6 @@ tr.row-click {
   animation: bits-enter var(--dur-base) var(--ease-pop) backwards;
 }
 
-/* Leaderboard: podium strip above the table; the active tab gets weight.
-   H1: fixed 3 columns — a short board pads out with ghost cards rather than
-   reflowing to fewer, wider ones. */
-.podium {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  max-width: 640px;
-  margin-bottom: 16px;
-}
-.podium .panel {
-  margin: 0;
-}
-.podium-rank {
-  color: var(--muted);
-  font-size: 13px;
-}
-.podium-acc {
-  font-size: 1.6rem;
-  font-weight: 700;
-}
-
-/* H1: an unfilled top-3 spot — dashed border, muted invite, links to "/". */
-.podium-ghost {
-  display: grid;
-  gap: 4px;
-  justify-items: start;
-  border: 1px dashed var(--line);
-  background: none;
-  text-decoration: none;
-  color: inherit;
-}
-
-@media (max-width: 480px) {
-  .podium {
-    grid-template-columns: 1fr;
-  }
-}
 /* H2: GooeyNav's pressed filter chip carries the same "this is the active
    one" weight as an aria-current page link elsewhere in the app. */
 .chip-button[aria-pressed='true'] {

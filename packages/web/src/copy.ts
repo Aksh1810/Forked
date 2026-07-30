@@ -48,7 +48,6 @@ export const copy = {
   wrappedCta: 'Analyze my games',
   pgnPlaceholder: 'Paste PGN here',
   tickerSuffix: 'positions judged',
-  leaderboard: 'Leaderboard',
   yourLink: 'This page is your link. Come back anytime.',
   browseHint: 'Enter your chess.com username first.',
   privacyLine: 'Public chess.com games only. Nothing to sign up for.',
@@ -81,12 +80,11 @@ export const copy = {
     srAnnounce: (completed: number, total: number) => `${completed} of ${total} games`,
   },
 
-  // K7: breakdown/leaderboard load failures distinct from true not-found —
-  // the API collapses network errors and 404s into the same null today, so
-  // this is shown after a retry still comes back empty.
+  // K7: breakdown load failures distinct from true not-found — the API
+  // collapses network errors and 404s into the same null today, so this is
+  // shown after a retry still comes back empty.
   outage: {
     breakdown: "Couldn't load this analysis — refresh to retry.",
-    leaderboard: 'Leaderboard is unavailable right now.',
     // K6: the per-game poll gives up after repeated network failures,
     // distinct from the "no analysis exists" / notFound copy.
     gamePoll: "Couldn't reach the server — refresh to retry.",
@@ -221,29 +219,6 @@ export const copy = {
     missedMate: (n: number) => `You had a forced mate in ${n}.`,
     hangs: (piece: string) => `This hangs the ${piece}.`,
     bestWasTake: (piece: string, square: string) => `Best was to take the ${piece} on ${square}.`,
-  },
-
-  // Leaderboard: public by construction, removable by anyone who asks.
-  leader: {
-    title: 'Leaderboard',
-    floorNote: 'Ranked after 50 analyzed games.',
-    archetypeNote: 'Archetype is a playstyle read from your move history, not a rating.',
-    empty: 'The board opens once someone finishes a 50-game analysis.',
-    colRank: '#',
-    colPlayer: 'Player',
-    colAccuracy: 'Accuracy',
-    colGames: 'Games',
-    colArchetype: 'Archetype',
-    removeTitle: 'Not into this?',
-    removeNote: 'The board is built from public chess.com games. Remove yourself anytime.',
-    removePlaceholder: 'chess.com username',
-    removeCta: 'Remove me',
-    removeBusy: 'Removing...',
-    removeDone: 'Removed. Your entry will not appear again.',
-    back: 'Back',
-    // H1: podium ghost card for an unfilled top-3 spot.
-    podiumGhost: (rank: number) => `#${rank} — this spot is open`,
-    podiumGhostCta: 'Analyze your games',
   },
 
   // F1/F2: breakdown dashboard KPI strip and chart-gating empty states.

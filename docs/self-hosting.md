@@ -72,10 +72,8 @@ ride the Lambda fleet.
 - The janitor self-heals stuck jobs every 10 minutes (30s locally). If you
   kill every worker mid-job, the job converges when workers return; that is a
   tested property, not a hope (`scripts/local/` kill tests).
-- The leaderboard is opt-out by design; `POST /leaderboard/remove` hides a
-  username and survives later re-analysis.
-- Rate limits are per username+IP per day (`RATE_PER_DAY`), and the
-  leaderboard opt-out endpoint is capped at 20/day/IP.
+- Rate limits are per username+IP per day (`RATE_PER_DAY`), and the games
+  browse list is capped at 300/day/IP.
 - To wipe local state: stop the JVM stack and delete
   `dynamodb-local-metadata.json` plus the stack's data dir, or just recreate
   the table (the harness `ensureTable()` recreates it on next gate run).

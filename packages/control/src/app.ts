@@ -2,8 +2,8 @@ import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
-import { GetCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
-import { leaderUserKey, metricsKey } from '@forked/shared'
+import { GetCommand } from '@aws-sdk/lib-dynamodb'
+import { metricsKey } from '@forked/shared'
 import type { Deps } from '@forked/worker'
 import { UserNotFoundError, type ChessCom } from './chesscom.js'
 import type { ControlConfig } from './env.js'
@@ -113,84 +113,6 @@ export function makeApp(
     if (!ID_RE.test(id) || !ID_RE.test(gameId)) return c.json({ ok: false, code: 'not-found' }, 404)
     const report = await getGameReport(deps, id, gameId)
     return report ? c.json(report) : c.json({ ok: false, code: 'not-found' }, 404)
-  })
-
-  // Public leaderboard: the whole board lives in one partition, so a single
-  // Query serves both tabs. Rank floor is 50 games; opted-out users never
-  // appear.
-  app.get('/leaderboard', async (c) => {
-    // Shared across all visitors; the CDN can serve stale for 5min while revalidating.
-    c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
-    const out = await deps.ddb.send(
-      new QueryCommand({
-        TableName: deps.table,
-        KeyConditionExpression: 'pk = :pk',
-        ExpressionAttributeValues: { ':pk': 'LEADER' },
-      }),
-    )
-    const items = (out.Items ?? []) as Record<string, unknown>[]
-    const users = items
-      .filter((i) => String(i.sk).startsWith('USER#') && Number(i.games ?? 0) >= 50 && !i.optOut)
-      .map((i) => ({
-        username: i.username as string,
-        accuracy: i.accuracy as number,
-        games: i.games as number,
-        archetype: i.archetype as { key: string; name: string; mark: string },
-      }))
-      .sort((a, b) => b.accuracy - a.accuracy)
-
-    // Today's blunder if one landed already, else yesterday's: the UTC
-    // boundary would otherwise blank the tab every morning.
-    const blunders = new Map(items.filter((i) => String(i.sk).startsWith('BLUNDER#')).map((i) => [i.sk as string, i]))
-    const today = new Date()
-    const b =
-      blunders.get(`BLUNDER#${today.toISOString().slice(0, 10)}`) ??
-      blunders.get(`BLUNDER#${new Date(today.getTime() - 86_400_000).toISOString().slice(0, 10)}`)
-    const blunder = b
-      ? {
-          username: b.username as string,
-          jobId: b.jobId as string,
-          gameId: b.gameId as string,
-          opponent: b.opponent as string,
-          move: b.move as string,
-          ply: b.ply as number,
-          lossPct: b.lossPct as number,
-          fen: b.fen as string,
-          cliff: b.cliff as number[],
-        }
-      : null
-    return c.json({ users, blunder })
-  })
-
-  // Unauthenticated by design: the board only shows public chess.com data,
-  // and this endpoint can only hide an entry, never fabricate a ranking.
-  // Unconditional upsert on purpose: an opt-out placed while a job is still
-  // analyzing leaves a stub the later finalize SETs around (it never touches
-  // optOut), so removal wins that race permanently. Stubs have no games
-  // attribute and can never render.
-  app.post('/leaderboard/remove', async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-    const username = typeof body.username === 'string' ? body.username.trim().toLowerCase() : ''
-    if (!USERNAME_RE.test(username)) return c.json({ ok: false, code: 'bad-request' }, 400)
-    // Per-IP daily cap: the upsert would otherwise let one client write
-    // unbounded stub items into the LEADER partition.
-    try {
-      await bumpRate(deps, 'leader-remove', clientIp(c), 20)
-    } catch (e) {
-      if (e instanceof ConditionalCheckFailedException) {
-        return c.json({ ok: false, code: 'rate-limited' }, 429)
-      }
-      throw e
-    }
-    await deps.ddb.send(
-      new UpdateCommand({
-        TableName: deps.table,
-        Key: leaderUserKey(username),
-        UpdateExpression: 'SET optOut = :t',
-        ExpressionAttributeValues: { ':t': true },
-      }),
-    )
-    return c.json({ ok: true })
   })
 
   // Landing-page ticker: the one all-time counter item.

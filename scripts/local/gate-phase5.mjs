@@ -1,9 +1,7 @@
-// Phase 5 gate demo, the two locally-verifiable gates:
+// Phase 5 gate demo, the one locally-verifiable gate:
 //   (a) the runtime-estimate + monthly-budget routing guard, against the
 //       real local queues (calls production ingest directly so the Lambda
 //       queue can be enabled without restarting the API server)
-//   (d) the leaderboard endpoint: 50-game floor, opt-out, blunder of the day
-//       (drives the running control API on API_BASE)
 // Gates (b) and (c) need the deployed stack; see docs/deploy.md.
 //
 // Assumes the JVM stack is up and the control API is serving. Run with the
@@ -11,13 +9,12 @@
 // games into cache hits before the queue counts are read.
 //
 // Usage: node scripts/local/gate-phase5.mjs
-import { DeleteCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
+import { PutCommand } from '@aws-sdk/lib-dynamodb'
 import { GetQueueAttributesCommand, PurgeQueueCommand } from '@aws-sdk/client-sqs'
-import { leaderBlunderKey, leaderUserKey, metricsKey } from '../../packages/shared/dist/index.js'
+import { metricsKey } from '../../packages/shared/dist/index.js'
 import { ingest } from '../../packages/control/dist/src/index.js'
 import { assert, ddb, deps, ensureQueue, ensureTable, sleep, TABLE } from './harness.mjs'
 
-const API = process.env.API_BASE ?? 'http://localhost:8787'
 await ensureTable()
 
 const SCHOLARS = `[Event "Live Chess"]
@@ -103,84 +100,6 @@ assert((await count(containerUrl)) === 1, 'gate a: long-estimate game stayed on 
 // queue, where the worker drains them next time it runs.
 await purgeBoth()
 
-// ---- Gate (d): leaderboard floor, sort, blunder of the day, opt-out.
-const today = new Date().toISOString().slice(0, 10)
-const gateUsers = []
-for (let i = 1; i <= 10; i++) {
-  const username = `gate5_u${String(i).padStart(2, '0')}`
-  gateUsers.push(username)
-  await ddb.send(
-    new PutCommand({
-      TableName: TABLE,
-      Item: {
-        ...leaderUserKey(username),
-        username,
-        accuracy: 59 + i,
-        games: 55,
-        archetype: { key: 'flag', name: 'The Flagger', mark: 'F' },
-        updatedAt: new Date().toISOString(),
-      },
-    }),
-  )
-}
-await ddb.send(
-  new PutCommand({
-    TableName: TABLE,
-    Item: { ...leaderUserKey('gate5_floor'), username: 'gate5_floor', accuracy: 99, games: 49 },
-  }),
-)
-await ddb.send(
-  new PutCommand({
-    TableName: TABLE,
-    Item: { ...leaderUserKey('gate5_ghost'), username: 'gate5_ghost', accuracy: 99, games: 200, optOut: true },
-  }),
-)
-await ddb.send(
-  new PutCommand({
-    TableName: TABLE,
-    Item: {
-      ...leaderBlunderKey(today),
-      username: 'gate5_u05',
-      jobId: 'gate5-job',
-      gameId: 'gate5-game',
-      opponent: 'rival',
-      move: 'Qh4',
-      ply: 22,
-      lossPct: 99.9,
-      fen: 'rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3',
-      cliff: [50, 52, 48, 51, 7],
-      ttl: Math.floor(Date.now() / 1000) + 3600,
-    },
-  }),
-)
-
-const board = await fetch(`${API}/leaderboard`).then((r) => r.json())
-const names = board.users.map((u) => u.username)
-assert(gateUsers.every((u) => names.includes(u)), 'gate d: all ten 55-game users are ranked')
-assert(!names.includes('gate5_floor'), 'gate d: the 49-game user is below the floor')
-assert(!names.includes('gate5_ghost'), 'gate d: the opted-out user is hidden')
-assert(
-  names.indexOf('gate5_u10') < names.indexOf('gate5_u01'),
-  'gate d: sorted by accuracy, best first',
-)
-assert(board.blunder?.username === 'gate5_u05' && board.blunder.cliff.length === 5,
-  'gate d: blunder of the day is served with its board and cliff data')
-
-const rm = await fetch(`${API}/leaderboard/remove`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ username: 'gate5_u05' }),
-}).then((r) => r.json())
-assert(rm.ok, 'gate d: remove endpoint accepted the opt-out')
-const after = await fetch(`${API}/leaderboard`).then((r) => r.json())
-assert(!after.users.some((u) => u.username === 'gate5_u05'), 'gate d: removed user no longer ranked')
-assert(after.users.some((u) => u.username === 'gate5_u04'), 'gate d: everyone else still ranked')
-
-// Cleanup: gate leader items out, budget counter back to zero.
-for (const username of [...gateUsers, 'gate5_floor', 'gate5_ghost']) {
-  await ddb.send(new DeleteCommand({ TableName: TABLE, Key: leaderUserKey(username) }))
-}
-await ddb.send(new DeleteCommand({ TableName: TABLE, Key: leaderBlunderKey(today) }))
 await setBudgetSpent(0)
 
-console.log('\nphase 5 gates a + d: PASS (b + c are deploy-day gates, see docs/deploy.md)')
+console.log('\nphase 5 gate a: PASS (b + c are deploy-day gates, see docs/deploy.md)')

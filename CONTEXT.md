@@ -37,7 +37,7 @@ case-insensitive; the folding rule lives in one place.
 
 **Classification vs. display tier** — the *stored* classification is four
 values (`blunder | mistake | inaccuracy | none`) and feeds insights, accuracy,
-and the leaderboard. The chess.com-style *display tiers* (`brilliant`, `great`,
+and accuracy. The chess.com-style *display tiers* (`brilliant`, `great`,
 `best`, `excellent`, `good`, `book`, `inaccuracy`, `mistake`, `miss`,
 `blunder`) are re-derived at render time from the record, so re-tuning the
 bands re-labels old games with no re-analysis. `packages/shared/src/classify.ts`.
