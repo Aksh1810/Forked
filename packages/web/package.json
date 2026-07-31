@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@forked/shared": "*",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/og": "^0.11.1",
     "chessops": "^0.15.0",
     "d3": "^7.9.0",
