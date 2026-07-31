@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Space_Grotesk, IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google'
 import Link from 'next/link'
+import { Analytics } from '@vercel/analytics/next'
 import { BRAND_NAME } from '@forked/shared'
 import { copy } from '../copy'
 import './globals.css'
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </Link>
         </header>
         {children}
+        <Analytics />
       </body>
     </html>
   )
