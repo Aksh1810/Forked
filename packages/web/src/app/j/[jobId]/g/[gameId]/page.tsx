@@ -765,28 +765,35 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
             />
           </div>
 
-          <MoveList
-            record={record}
-            sans={sans}
-            enriched={enriched}
-            selected={selected}
-            onSelect={select}
-            exploreLine={branch ? { afterPly: branch.base, sans: branchSans } : null}
-          />
+          {/* Moves + step buttons travel together: on mobile this wrapper
+              becomes a dock fixed to the bottom of the viewport, so the board
+              and the moves bar own the first screen and everything else is
+              scrolled to. On desktop it's `display: contents` — a pass-through
+              that leaves both children as direct .review-panel flex items. */}
+          <div className="review-dock">
+            <MoveList
+              record={record}
+              sans={sans}
+              enriched={enriched}
+              selected={selected}
+              onSelect={select}
+              exploreLine={branch ? { afterPly: branch.base, sans: branchSans } : null}
+            />
 
-          <div className="nav-toolbar">
-            <button className="chip-button" onClick={() => select(null)} disabled={!branch && selected === null} aria-label={copy.coach.firstLabel}>
-              {copy.coach.navFirst}
-            </button>
-            <button className="chip-button" onClick={() => step(-1)} disabled={selected === null} aria-label={copy.coach.prevLabel}>
-              {copy.coach.navPrev}
-            </button>
-            <button className="chip-button" onClick={() => step(1)} disabled={total === 0 || selected === total} aria-label={copy.coach.nextLabel}>
-              {copy.coach.navNext}
-            </button>
-            <button className="chip-button" onClick={() => select(total)} disabled={total === 0 || (!branch && selected === total)} aria-label={copy.coach.lastLabel}>
-              {copy.coach.navLast}
-            </button>
+            <div className="nav-toolbar">
+              <button className="chip-button" onClick={() => select(null)} disabled={!branch && selected === null} aria-label={copy.coach.firstLabel}>
+                {copy.coach.navFirst}
+              </button>
+              <button className="chip-button" onClick={() => step(-1)} disabled={selected === null} aria-label={copy.coach.prevLabel}>
+                {copy.coach.navPrev}
+              </button>
+              <button className="chip-button" onClick={() => step(1)} disabled={total === 0 || selected === total} aria-label={copy.coach.nextLabel}>
+                {copy.coach.navNext}
+              </button>
+              <button className="chip-button" onClick={() => select(total)} disabled={total === 0 || (!branch && selected === total)} aria-label={copy.coach.lastLabel}>
+                {copy.coach.navLast}
+              </button>
+            </div>
           </div>
           <p className="quiet keyboard-hint">
             <kbd>←</kbd> <kbd>→</kbd> {copy.coach.keysHint}

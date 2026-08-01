@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { area, scaleLinear, line } from 'd3'
 import { whiteWinPct, type EngineRecord, type Enriched, type PlyAnalysis } from '@forked/shared'
@@ -190,9 +190,22 @@ export function MoveList({
   // position). The current (last) SAN is emphasized.
   exploreLine?: { afterPly: number; sans: string[] } | null
 }) {
+  const listRef = useRef<HTMLOListElement>(null)
+
   useEffect(() => {
-    const el = document.querySelector('.move-selected') as HTMLElement | null
-    el?.scrollIntoView({ block: 'nearest' })
+    const list = listRef.current
+    const el = list?.querySelector('.move-selected') as HTMLElement | null
+    // Scroll the list itself, never the page. This used to be
+    // `el.scrollIntoView({ block: 'nearest' })`, which walks up to the nearest
+    // SCROLLABLE ancestor — on the mobile layout the move list isn't one, so
+    // that ancestor was the document and every Next press dragged the whole
+    // page down a row until the board scrolled off the top.
+    if (list && el) {
+      const elR = el.getBoundingClientRect()
+      const listR = list.getBoundingClientRect()
+      if (elR.top < listR.top) list.scrollTop += elR.top - listR.top
+      else if (elR.bottom > listR.bottom) list.scrollTop += elR.bottom - listR.bottom
+    }
     // The focus ring must follow the selection: if a stale move-cell still
     // holds focus after navigating, move focus to the current move (or drop
     // it) so its white outline doesn't linger on the old move.
@@ -209,7 +222,7 @@ export function MoveList({
   }
 
   return (
-    <ol className="mono move-pairs" aria-label="move list">
+    <ol ref={listRef} className="mono move-pairs" aria-label="move list">
       {exploreLine && exploreLine.afterPly === 0 && (
         <li className="move-variation quiet mono">
           <ExploreVariation afterPly={0} sans={exploreLine.sans} />

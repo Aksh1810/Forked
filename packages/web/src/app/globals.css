@@ -1169,6 +1169,14 @@ tr.row-click {
   min-width: 0;
 }
 
+/* The move list + step buttons wrapper. On desktop it is a pass-through, so
+   both children stay direct flex items of .review-panel and inherit its gap —
+   the wrapper only becomes a real box (a dock pinned to the bottom of the
+   viewport) in the max-width: 1000px query below. */
+.review-dock {
+  display: contents;
+}
+
 .button-row {
   display: flex;
   gap: 8px;
@@ -1440,35 +1448,106 @@ tr.row-click {
 /* I1: was 720px — a 400px-fixed side panel (.review-panel) squeezed the
    board too hard on a mid-size tablet/narrow laptop before that. */
 @media (max-width: 1000px) {
+  /* Height of the fixed moves/step-buttons dock, in one place: 132px move box
+     + 8px gap + 44px buttons + 16px padding + 1px border, rounded up. */
+  :root {
+    --dock-h: 204px;
+  }
+
   .review {
     grid-template-columns: 1fr;
   }
-  /* Mobile order: board, then coach/summary card, graph, move list, nav
-     toolbar (B3: graph reads above the move list everywhere). */
+
+  /* Board first. The page title, result line, moment CTA and accuracy strip
+     all move BELOW the board so the board and the dock own the first screen —
+     everything else is a scroll away. .fx-overlay (CheckmateFx) is fixed, so
+     it takes no space as a flex item here. */
+  .report {
+    display: flex;
+    flex-direction: column;
+    /* Clear the fixed dock so the last content isn't hidden behind it. */
+    padding-bottom: calc(var(--dock-h) + 24px + env(safe-area-inset-bottom, 0px));
+  }
+  .report > .review {
+    order: -1;
+  }
+
+  /* Cap the board by the height left over after the dock so the two fit one
+     screen. The board grid is `width: size; max-width: 100%; aspect-ratio: 1`,
+     so a max-width cap IS a height cap; applying it to the whole left column
+     keeps the player rows and engine lines aligned with the narrowed board.
+     The 132px is the chrome sharing that screen: the site header plus BOTH
+     player rows — the lower one has to clear the dock too, or the name under
+     the board (usually yours) ends up sliced in half by it. The 264px floor
+     stops the board shrinking into uselessness on a very short viewport: at
+     that size a landscape phone still can't show the board AND the dock at
+     rest, but the board does fit fully on screen after one short scroll,
+     which a smaller-still board would not buy back in readability. */
+  .review-left {
+    max-width: max(264px, calc(100dvh - var(--dock-h) - 132px));
+    margin-inline: auto;
+  }
+
+  /* Mobile order within the panel: coach/summary card, then graph (B3: the
+     graph reads above the move list everywhere). The moves and step buttons
+     are no longer in this flow — they live in the dock below. */
   .review-panel > .coach-card {
     order: 0;
   }
   .review-panel .review-graph {
     order: 2;
   }
-  .review-panel .move-pairs {
-    order: 3;
-    height: auto;
-    max-height: none;
-    overflow-y: visible;
-  }
-  .review-panel .nav-toolbar {
-    order: 4;
-    /* B1: pin the step buttons under the thumb instead of scrolling away
-       past a long move list. */
-    position: sticky;
-    bottom: 0;
-    background: var(--surface);
-    border-top: 1px solid var(--line);
-    padding: 8px 0;
-  }
   .review-panel .keyboard-hint {
     order: 4;
+  }
+
+  /* B1: the moves bar and the step buttons pin to the bottom of the viewport,
+     always under the thumb, instead of scrolling away past a long move list.
+     Safe as `fixed`: nothing above .review sets transform/filter/backdrop-
+     filter/contain, so this anchors to the viewport rather than an ancestor. */
+  .review-dock {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    background: var(--void);
+    border-top: 1px solid var(--line);
+    padding: 8px 20px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The move list stays a real scroll port here. When it was `height: auto;
+     overflow-y: visible`, MoveList's scroll-the-selected-move-into-view found
+     the DOCUMENT as its nearest scrollable ancestor and every Next press
+     scrolled the whole page down a row. */
+  .review-panel .move-pairs {
+    height: 132px; /* exactly 3 move-pair rows at 44px each */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* The dock is already pinned, so the toolbar drops its own sticky shell. */
+  .review-panel .nav-toolbar {
+    position: static;
+    border-top: none;
+    padding: 0;
+  }
+}
+
+/* Landscape phones and other short viewports: a 3-row move box would eat over
+   half the screen, so the dock keeps the step buttons and drops to a single
+   move row. The board still won't fully share the screen with the dock here —
+   it bottoms out on the 264px floor above — but this hands back ~90px of it,
+   and the whole board is one short scroll away. */
+@media (max-width: 1000px) and (max-height: 560px) {
+  :root {
+    --dock-h: 116px;
+  }
+  .review-panel .move-pairs {
+    height: 44px; /* one move-pair row */
   }
 }
 
