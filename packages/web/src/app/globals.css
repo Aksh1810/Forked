@@ -1469,7 +1469,7 @@ tr.row-click {
     display: flex;
     flex-direction: column;
     /* Clear the fixed dock so the last content isn't hidden behind it. */
-    padding-bottom: calc(var(--dock-h) + 24px);
+    padding-bottom: calc(var(--dock-h) + 24px + env(safe-area-inset-bottom, 0px));
   }
   .report > .review {
     order: -1;
