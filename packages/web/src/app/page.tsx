@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { normalizeUsername } from '@forked/shared'
 import { copy } from '../copy'
-import { getPositionsJudged, postIngest } from '../lib/api'
+import { getPositionsJudged } from '../lib/api'
 import { poll } from '../lib/poll'
 import { ClickSpark } from '../components/bits/ClickSpark'
 import { ShinyText } from '../components/bits/ShinyText'
@@ -13,17 +13,11 @@ import { CountUp } from '../components/bits/CountUp'
 import { LetterGlitch } from '../components/bits/LetterGlitch'
 import { SplitText } from '../components/bits/SplitText'
 import { Magnet } from '../components/bits/Magnet'
-import { FadeContent } from '../components/bits/FadeContent'
 
 export default function Landing() {
   const router = useRouter()
   const [username, setUsername] = useState('')
-  const [pgn, setPgn] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-  const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -34,31 +28,6 @@ export default function Landing() {
     }
     setError(null)
     router.push(`/u/${encodeURIComponent(u)}`)
-  }
-
-  async function submitWrapped(e: React.FormEvent) {
-    e.preventDefault()
-    if (busy) return
-    const u = username.trim() ? normalizeUsername(username) : null
-    if (username.trim() && !u) {
-      setError(copy.browseHint)
-      return
-    }
-    setError(null)
-    setBusy(true)
-    const res = await postIngest({
-      username: u ?? undefined,
-      pgn: pgn.trim() || undefined,
-      from: from || undefined,
-      to: to || undefined,
-    })
-    setBusy(false)
-    if (res.ok) {
-      router.push(`/j/${res.jobId}`)
-      return
-    }
-    if (res.code === 'archive-too-large') setExpanded(true)
-    setError(copy.errors[res.code] ?? copy.errors.generic)
   }
 
   return (
@@ -105,55 +74,8 @@ export default function Landing() {
             {error}
           </p>
         )}
-        {/* D3: plain quiet links — one accent object in the hero (the CTA). */}
-        <button
-          type="button"
-          className="link-button"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {copy.wrappedToggle}
-        </button>
       </form>
       <p className="quiet">{copy.privacyLine}</p>
-
-      {expanded && (
-        <FadeContent blur duration={250}>
-        <form onSubmit={submitWrapped} className="expand-row">
-          <textarea
-            className="field"
-            rows={5}
-            placeholder={copy.pgnPlaceholder}
-            aria-label={copy.pgnPlaceholder}
-            value={pgn}
-            onChange={(e) => setPgn(e.target.value)}
-          />
-          <div className="range-row">
-            <label>
-              From
-              <input
-                className="field"
-                type="month"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-            </label>
-            <label>
-              To
-              <input
-                className="field"
-                type="month"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-              />
-            </label>
-          </div>
-          <button className="cta" type="submit" disabled={busy}>
-            {busy ? copy.ctaBusy : copy.wrappedCta}
-          </button>
-        </form>
-        </FadeContent>
-      )}
       </div>
 
       <Ticker />

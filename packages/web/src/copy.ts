@@ -32,7 +32,7 @@ export function formatMonth(m: string): string {
   return name ? `${name} ${yyyy}` : m
 }
 
-// Phase display labels, shared by the report summary and the breakdown KPIs.
+// Phase display labels, used by the report summary.
 export const phaseLabels: Record<'opening' | 'middlegame' | 'endgame', string> = {
   opening: 'Opening',
   middlegame: 'Middlegame',
@@ -43,19 +43,15 @@ export const copy = {
   sub: "Every game you've played on chess.com, listed instantly. Pick one and Stockfish explains it, move by move, in about ten seconds. Free.",
   inputPlaceholder: 'chess.com username',
   cta: 'Show my games',
-  ctaBusy: 'Fetching your games...',
-  wrappedToggle: 'Get the whole-history Wrapped story instead',
-  wrappedCta: 'Analyze my games',
-  pgnPlaceholder: 'Paste PGN here',
   tickerSuffix: 'positions judged',
-  yourLink: 'This page is your link. Come back anytime.',
   browseHint: 'Enter your chess.com username first.',
+  // Shown by the /j/[jobId] shim when an old shared link resolves to nothing.
+  jobGone: 'No analysis lives at this link.',
   privacyLine: 'Public chess.com games only. Nothing to sign up for.',
 
   errors: {
     'user-not-found': "That username doesn't exist on chess.com.",
-    'no-games': 'This account has no games yet.',
-    'archive-too-large': "That's a lot of games. Pick a date range below and try again.",
+    'no-games': "That game isn't in this account and month.",
     'rate-limited': "You've hit today's limit for this account. Come back tomorrow.",
     busy: 'This account is being analyzed right now. Try again in a moment.',
     'bad-request': "That doesn't look like a chess.com username.",
@@ -63,28 +59,7 @@ export const copy = {
     generic: 'Something broke on our side. Try again.',
   } as Record<string, string>,
 
-  progress: {
-    gamesLabel: 'games judged',
-    ppsLabel: 'positions per second',
-    completeTitle: 'Analysis complete.',
-    completeNote: 'Your story is on its way. This link will hold it.',
-    failedTitle: 'This one broke on our side.',
-    failedNote: 'Try again from the start. Your games are safe on chess.com.',
-    notFound: 'No analysis lives at this link.',
-    skippedGames: (n: number) => `${n} ${n === 1 ? 'game' : 'games'} skipped:`,
-    // Quiet ETA line (C2/item 3) while a job is analyzing.
-    etaMinutes: (n: number) => `about ${n} min left`,
-    etaUnderMinute: 'under a minute left',
-    // J3: visually-hidden live-region text announcing progress to screen
-    // readers (the eval bar's fill is the only sighted signal otherwise).
-    srAnnounce: (completed: number, total: number) => `${completed} of ${total} games`,
-  },
-
-  // K7: breakdown load failures distinct from true not-found — the API
-  // collapses network errors and 404s into the same null today, so this is
-  // shown after a retry still comes back empty.
   outage: {
-    breakdown: "Couldn't load this analysis — refresh to retry.",
     // K6: the per-game poll gives up after repeated network failures,
     // distinct from the "no analysis exists" / notFound copy.
     gamePoll: "Couldn't reach the server — refresh to retry.",
@@ -94,7 +69,6 @@ export const copy = {
   browse: {
     title: (u: string) => `@${u}'s games`,
     back: 'Back',
-    analyzeAll: 'Analyze all',
     analyze: 'Analyze',
     // Shown in place of `analyze` once a game has already been analyzed
     // (browse list, item 6) — click behavior is unchanged, only the label.
@@ -221,35 +195,6 @@ export const copy = {
     bestWasTake: (piece: string, square: string) => `Best was to take the ${piece} on ${square}.`,
   },
 
-  // F1/F2: breakdown dashboard KPI strip and chart-gating empty states.
-  breakdown: {
-    kpiAccuracy: 'Accuracy avg',
-    kpiBlunders: 'Blunders total',
-    kpiGames: 'Games analyzed',
-    kpiWorstPhase: 'Worst phase',
-    // Shown in a chart Panel whenever its series has fewer than 3 points.
-    emptyChart: (n: number) => `Analyze ${n}+ games to unlock this trend.`,
-  },
-
-  // Rotating status pool, one line every 4 seconds.
-  statusLines: [
-    'Judging your endgames...',
-    'Counting the queens you hung...',
-    'Asking Stockfish if that was really the plan...',
-    'Measuring the depth of that h-pawn push...',
-    'Finding the knight you left on the rim...',
-    'Replaying the trades you instantly regretted...',
-    'Checking whether that sacrifice was on purpose...',
-    'Locating your rooks. Still on their starting squares...',
-    'Grading your opening theory. Generously...',
-    'Watching your clock melt in the endgame...',
-    'Tallying the forks you walked into...',
-    'Reading your resignations for dramatic timing...',
-    'Confirming the bishop pair was, at some point, a pair...',
-    'Weighing every pawn you called poisoned and ate anyway...',
-    'Sorting your wins from your escapes...',
-  ],
-
   // /about page: one quiet GPL-credit line for the live browser Stockfish
   // engine (item 10, Wave 2).
   about: {
@@ -261,92 +206,3 @@ export const copy = {
 
 // Book-tier coach headline, naming the opening: "<san> is a book move · <name>".
 export const bookHeadline = (san: string, openingName: string) => `${san} ${copy.coach.is.book} · ${openingName}`
-
-// Story copy. Roast the moves, never the person; every playful line pairs with
-// the stat that earned it; the arc closes on a flex. All templates live here,
-// never inline in components.
-export const story = {
-  scale: (positions: string, games: number) => `We judged ${positions} positions across ${games} games.`,
-  scaleSub: 'That took a pool of chess engines a while. It took you a lifetime.',
-  accuracyTitle: 'Your accuracy',
-  accuracyPercentile: (p: number) => `Better than ${p}% of analyzed players.`,
-  accuracyNoPercentile: 'A percentile lands here once enough players are ranked.',
-  flexTitle: 'Your best moment',
-  flexLine: (move: string, opponent: string) => `${move} against ${opponent}. Stockfish agrees with you.`,
-  flexGameLine: (acc: number, opponent: string) => `Your cleanest game: ${acc.toFixed(1)}% against ${opponent}.`,
-  blunderTitle: 'Your worst move',
-  blunderLine: (move: string, loss: number) =>
-    `${move} threw away ${loss} points of win probability in a single move.`,
-  poisonTitle: 'Your poison opening',
-  poisonLine: (family: string, mult: number) => `You blunder ${mult}x more often in the ${family} than your average.`,
-  timeTitle: 'Under pressure',
-  timeLine: (drop: number) => `Under 30 seconds on the clock, your accuracy drops ${drop.toFixed(1)} points.`,
-  timeNoDrop: 'The clock does not rattle you. Rare.',
-  worstDayLine: (date: string, games: number) => `Your worst day was ${date}. ${games} games. It went how you think.`,
-  archetypeKicker: 'Your archetype',
-  delighterTitle: 'One more thing',
-  toCard: 'See your card',
-  skipToCard: 'Skip to card',
-  replay: 'Replay',
-  // Per-slide share: each slide is deep-linkable, so a viewer can send just
-  // this one moment rather than the whole story.
-  shareSlide: 'Share this',
-  slideCopied: 'Link copied',
-} as const
-
-// Delighter templates, one per weird-stat kind, keyed to match the shared
-// Delighter discriminated union.
-export const delighterLines = {
-  'longest-game': (plies: number, opp: string) =>
-    `Your longest game ran ${Math.ceil(plies / 2)} moves against ${opp}. Nobody was having fun.`,
-  'most-faced': (opp: string, count: number) => `You faced ${opp} ${count} times. A rivalry, whether they know it or not.`,
-  'blundered-square': (square: string, count: number) => `You hung ${count} pieces on ${square}. That square is cursed.`,
-  'favorite-piece': (piece: string, count: number) => `You moved your ${piece} ${count} times. It is doing the heavy lifting.`,
-  comebacks: (count: number) => `You won ${count} games you were dead lost in. Refusing to resign is a strategy.`,
-} as const
-
-// Card and share copy.
-export const share = {
-  xText: (archetype: string, url: string) => `apparently I'm ${archetype} ?? ${url}`,
-  nativeTitle: 'My forked card',
-  download: 'Download PNG',
-  downloadStory: 'Download story size',
-  copyLink: 'Copy link',
-  copied: 'Copied',
-  shareX: 'Share to X',
-  shareNative: 'Share',
-  breakdown: 'See the full breakdown',
-} as const
-
-// The anticipation-teaser slot. Once partial aggregates exist (~30 percent
-// completion) a status line is occasionally replaced by a teaser built from
-// real forming data. Teasers hint, never reveal; the reveal belongs to the
-// story. Returns null when there is not yet enough signal to say something true.
-export function pickTeaser(agg: {
-  opb: Record<string, number>
-  opm: Record<string, number>
-  phb: Record<string, number>
-  phm: Record<string, number>
-} | null, completed: number, total: number): string | null {
-  if (!agg || total === 0 || completed / total < 0.3) return null
-
-  // A family the user is visibly blundering in, with a real sample.
-  let worstFamily: { family: string; rate: number } | null = null
-  for (const [family, moves] of Object.entries(agg.opm)) {
-    if (moves < 8) continue
-    const rate = (agg.opb[family] ?? 0) / moves
-    if (!worstFamily || rate > worstFamily.rate) worstFamily = { family, rate }
-  }
-  if (worstFamily && worstFamily.rate > 0) return `We found something in your ${worstFamily.family} games...`
-
-  // Otherwise a phase where the trouble concentrates.
-  let worstPhase: { phase: string; blunders: number } | null = null
-  for (const [phase, blunders] of Object.entries(agg.phb)) {
-    if (!worstPhase || blunders > worstPhase.blunders) worstPhase = { phase, blunders }
-  }
-  if (worstPhase && worstPhase.blunders > 0) {
-    const where = worstPhase.phase === 'opening' ? 'the opening' : worstPhase.phase === 'endgame' ? 'the endgame' : 'the middlegame'
-    return `${where[0].toUpperCase()}${where.slice(1)} is where things happen for you...`
-  }
-  return null
-}

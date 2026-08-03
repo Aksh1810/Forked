@@ -33,7 +33,6 @@ npm-debug.log*
 # Agent tooling scratch
 .claude/settings.local.json
 .superpowers/
-CLAUDE.md
 
 # Installed agent skills (managed by skills-lock.json — run the installer to
 # restore). The lockfile is tracked; the installed content and its symlinks

@@ -35,23 +35,6 @@ export {
   type GameAggContribution,
 } from './aggregates.js'
 export {
-  computeInsights,
-  userMoves,
-  fenBeforePly,
-  type AnalyzedGame,
-  type UserMove,
-  type Insights,
-} from './insights.js'
-export { walkGame, type GameWalk } from './walk.js'
-export {
-  archetype,
-  computeArchetypeFeatures,
-  type Archetype,
-  type ArchetypeFeatures,
-} from './archetype.js'
-export { selectDelighter, type Delighter } from './delighter.js'
-export { buildWrappedSummary, WrappedSummarySchema, type WrappedSummary } from './wrapped.js'
-export {
   EvalSchema,
   ClassificationSchema,
   PlyAnalysisSchema,
@@ -80,7 +63,7 @@ export { cacheKey } from './cache-key.js'
 export { matchOpening, type OpeningMatch } from './openings.js'
 export {
   parseGamePgn,
-  parseAllGamesPgn,
+  fenBeforePly,
   finalStatus,
   standardUci,
   sanMoves,

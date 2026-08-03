@@ -16,7 +16,6 @@ const cfg: ControlConfig = {
   gbSecondsBudget: 300_000,
   estimatedNps: 350_000,
   contactEmail: 'x@y.z',
-  maxGamesPerJob: 5,
   nodeBudget: 150_000,
   ratePerDay: 5,
   port: 0,
@@ -50,11 +49,14 @@ const stubChessCom = (months: string[], gamesByMonth: Record<string, ArchiveGame
     monthGames: async (_u: string, m: string) => gamesByMonth[m] ?? [],
   }) as unknown as ChessCom
 
-const req = { username: 'kill_tester', ip: '1.2.3.4' }
+// A job is one game, so every request that gets past validation carries all
+// three of username, gameId and month.
+const req = { username: 'kill_tester', gameId: 'g-ok', month: '2024-03', ip: '1.2.3.4' }
+const march = stubChessCom(['2024-03'], { '2024-03': [okGame, badGame] })
 
 test('bad usernames are rejected before any storage or network call', async () => {
   const { deps, calls } = fakeDeps(() => ({}))
-  const res = await ingest(deps, cfg, stubChessCom([], {}), { username: 'no spaces!', ip: 'i' })
+  const res = await ingest(deps, cfg, stubChessCom([], {}), { ...req, username: 'no spaces!' })
   expect(res).toMatchObject({ ok: false, status: 400, code: 'bad-request' })
   expect(calls).toHaveLength(0)
 })
@@ -64,7 +66,7 @@ test('rate limit exhaustion returns 429', async () => {
     if (call.name === 'UpdateCommand' && call.input.Key.pk.startsWith('RATE#')) throw ccf()
     return {}
   })
-  const res = await ingest(deps, cfg, stubChessCom([], {}), req)
+  const res = await ingest(deps, cfg, march, req)
   expect(res).toMatchObject({ ok: false, status: 429, code: 'rate-limited' })
 })
 
@@ -76,150 +78,144 @@ test('a concurrent duplicate submission joins the running job', async () => {
     }
     return {}
   })
-  const res = await ingest(deps, cfg, stubChessCom([], {}), req)
+  const res = await ingest(deps, cfg, march, req)
   expect(res).toEqual({ ok: true, jobId: 'existing-job', joined: true })
 })
 
 test('nonexistent username fails cleanly and releases the lock', async () => {
   const { deps, calls } = fakeDeps(() => ({}))
   const cc = {
-    listMonths: async () => {
+    monthGames: async () => {
       throw new UserNotFoundError('ghost')
     },
   } as unknown as ChessCom
-  const res = await ingest(deps, cfg, cc, { username: 'ghost', ip: 'i' })
+  const res = await ingest(deps, cfg, cc, { ...req, username: 'ghost' })
   expect(res).toMatchObject({ ok: false, status: 404, code: 'user-not-found' })
   const deletes = byName(calls, 'DeleteCommand')
   expect(deletes).toHaveLength(1)
   expect(deletes[0].input.Key.pk).toBe('LOCK#ghost')
 })
 
-test('an archive past the cap aborts with date-range guidance, newest months first', async () => {
-  const seen: string[] = []
-  const months = ['2024-01', '2024-02', '2024-03']
-  const perMonth = Object.fromEntries(
-    months.map((m) => [m, [0, 1, 2].map((i) => ({ ...okGame, id: `${m}-${i}` }))]),
+test('happy path: one-game job, its game item, miss enqueued, lease extended', async () => {
+  const { deps, calls } = fakeDeps((call: Call) =>
+    call.name === 'GetQueueUrlCommand' ? { QueueUrl: 'http://q' } : {},
   )
-  const cc = {
-    listMonths: async () => months,
-    monthGames: async (_u: string, m: string) => {
-      seen.push(m)
-      return perMonth[m]
-    },
-  } as unknown as ChessCom
-  const { deps, calls } = fakeDeps(() => ({}))
-  const res = await ingest(deps, { ...cfg, maxGamesPerJob: 4 }, cc, req)
-  expect(res).toMatchObject({ ok: false, status: 422, code: 'archive-too-large' })
-  expect(seen).toEqual(['2024-03', '2024-02']) // newest first, stopped early
-  expect(byName(calls, 'DeleteCommand')).toHaveLength(1) // lock released
-})
+  const res = await ingest(deps, cfg, march, req)
+  expect(res).toMatchObject({ ok: true, joined: false, total: 1 })
 
-test('happy path: job + game items, reject pre-counted as failed, miss enqueued, lease extended', async () => {
-  const { deps, calls } = fakeDeps((call: Call) => {
-    if (call.name === 'GetQueueUrlCommand') return { QueueUrl: 'http://q' }
-    return {} // no cache hits, everything else succeeds
-  })
-  const res = await ingest(deps, cfg, stubChessCom(['2024-03'], { '2024-03': [okGame, badGame] }), req)
-  expect(res).toMatchObject({ ok: true, joined: false, total: 2 })
-
-  const jobPut = byName(calls, 'PutCommand').find((c) => String(c.input.Item.pk).startsWith('JOB#'))!
+  const jobPut = byName(calls, 'PutCommand').find(
+    (c) => String(c.input.Item.pk).startsWith('JOB#') && c.input.Item.sk === 'META',
+  )!
   expect(jobPut.input.Item).toMatchObject({
     status: 'analyzing',
-    total: 2,
+    gameId: 'g-ok',
+    total: 1,
     completed: 0,
-    failed: 1,
+    failed: 0,
     username: 'kill_tester',
     gsi1pk: 'STATUS#analyzing',
   })
 
-  const batch = byName(calls, 'BatchWriteCommand')[0].input.RequestItems.t
-  expect(batch).toHaveLength(2)
-  const items = batch.map((r: { PutRequest: { Item: Record<string, unknown> } }) => r.PutRequest.Item)
-  const ok = items.find((i: Record<string, unknown>) => i.gameId === 'g-ok')!
-  const bad = items.find((i: Record<string, unknown>) => i.gameId === 'g-bad')!
-  expect(ok).toMatchObject({ status: 'pending', userColor: 'black' })
-  expect(ok.cacheKey).toHaveLength(64)
-  expect(bad).toMatchObject({ status: 'failed', cacheKey: '', uciMoves: [] })
-  expect(bad.error).toContain('Variant')
+  // Only the requested game is written into the job, not the whole month.
+  const gamePuts = byName(calls, 'PutCommand').filter((c) => String(c.input.Item.sk).startsWith('GAME#'))
+  expect(gamePuts).toHaveLength(1)
+  const item = gamePuts[0].input.Item
+  expect(item).toMatchObject({ gameId: 'g-ok', status: 'pending', userColor: 'black' })
+  expect(item.cacheKey).toHaveLength(64)
 
-  const sends = byName(calls, 'SendMessageBatchCommand')
+  const sends = byName(calls, 'SendMessageCommand')
   expect(sends).toHaveLength(1)
-  expect(JSON.parse(sends[0].input.Entries[0].MessageBody)).toMatchObject({ gameId: 'g-ok' })
+  expect(JSON.parse(sends[0].input.MessageBody)).toMatchObject({ gameId: 'g-ok' })
 
   const leaseUpdate = byName(calls, 'UpdateCommand').find((c) => c.input.Key.pk === 'LOCK#kill_tester')!
   expect(leaseUpdate.input.UpdateExpression).toContain('leaseExpiry')
   expect(byName(calls, 'DeleteCommand')).toHaveLength(0) // job created, lock kept
 })
 
-test('single-game analyze builds a one-game job tagged single', async () => {
+test('a cache hit completes inside ingest instead of reaching the queue', async () => {
+  // The engine record for this game already exists, so ingest must settle the
+  // job through THE completion transaction and never enqueue anything. Every
+  // other test here answers GetCommand with {}, so this is the only coverage
+  // of that branch — and it is the branch that runs for any game some other
+  // user already analyzed.
+  const cached = {
+    cacheKey: 'x'.repeat(64),
+    engineVersion: 'Stockfish 18',
+    nodeBudget: cfg.nodeBudget,
+    uciMoves: parsed.uciMoves,
+    startEval: { type: 'cp', value: 0 },
+    plies: parsed.uciMoves.map((played, i) => ({
+      ply: i + 1,
+      played,
+      best: played,
+      pv: [],
+      evalAfter: { type: 'cp', value: 0 },
+      classification: 'none',
+      book: false,
+    })),
+  }
+  const { deps, calls } = fakeDeps((call: Call) => {
+    if (call.name === 'GetQueueUrlCommand') return { QueueUrl: 'http://q' }
+    if (call.name === 'GetCommand' && String(call.input.Key.pk).startsWith('CACHE#')) {
+      return { Item: { record: cached } }
+    }
+    return {}
+  })
+  const res = await ingest(deps, cfg, march, req)
+  expect(res).toMatchObject({ ok: true, total: 1 })
+
+  expect(byName(calls, 'SendMessageCommand')).toHaveLength(0) // never queued
+  expect(byName(calls, 'TransactWriteCommand')).toHaveLength(1) // settled in-line
+  const metrics = byName(calls, 'UpdateCommand').find((c) =>
+    String(c.input.Key.pk).startsWith('METRICS#'),
+  )!
+  expect(metrics.input.ExpressionAttributeValues).toMatchObject({ ':h': 1 })
+})
+
+test('a game chess.com rejects is pre-counted as failed and never enqueued', async () => {
   const { deps, calls } = fakeDeps((call: Call) =>
     call.name === 'GetQueueUrlCommand' ? { QueueUrl: 'http://q' } : {},
   )
-  const res = await ingest(deps, cfg, stubChessCom(['2024-03'], { '2024-03': [okGame, badGame] }), {
-    username: 'kill_tester',
-    gameId: 'g-ok',
-    month: '2024-03',
-    ip: 'i',
-  })
-  expect(res).toMatchObject({ ok: true, joined: false, total: 1 })
+  const res = await ingest(deps, cfg, march, { ...req, gameId: 'g-bad' })
+  expect(res).toMatchObject({ ok: true, total: 1 })
 
-  const jobPut = byName(calls, 'PutCommand').find((c) => String(c.input.Item.pk).startsWith('JOB#'))!
-  expect(jobPut.input.Item).toMatchObject({ kind: 'single', gameId: 'g-ok', total: 1, status: 'analyzing' })
+  const jobPut = byName(calls, 'PutCommand').find(
+    (c) => String(c.input.Item.pk).startsWith('JOB#') && c.input.Item.sk === 'META',
+  )!
+  expect(jobPut.input.Item).toMatchObject({ total: 1, completed: 0, failed: 1 })
 
-  const batch = byName(calls, 'BatchWriteCommand')[0].input.RequestItems.t
-  expect(batch).toHaveLength(1)
-  expect(batch[0].PutRequest.Item.gameId).toBe('g-ok')
+  const item = byName(calls, 'PutCommand').find((c) => String(c.input.Item.sk).startsWith('GAME#'))!.input.Item
+  expect(item).toMatchObject({ status: 'failed', cacheKey: '', uciMoves: [] })
+  expect(item.error).toContain('Variant')
+  expect(byName(calls, 'SendMessageCommand')).toHaveLength(0)
 })
 
-test('single-game analyze without a month is rejected before any lock', async () => {
+test('a request without a month is rejected before any lock', async () => {
   const { deps, calls } = fakeDeps(() => ({}))
-  const res = await ingest(deps, cfg, stubChessCom([], {}), {
-    username: 'kill_tester',
-    gameId: 'g-ok',
-    ip: 'i',
-  })
+  const res = await ingest(deps, cfg, march, { username: 'kill_tester', gameId: 'g-ok', ip: 'i' })
   expect(res).toMatchObject({ ok: false, status: 400, code: 'bad-request' })
   expect(calls).toHaveLength(0)
 })
 
-test('single-game analyze of a missing id returns no-games and releases the lock', async () => {
+test('a malformed month is rejected before any lock', async () => {
   const { deps, calls } = fakeDeps(() => ({}))
-  const res = await ingest(deps, cfg, stubChessCom(['2024-03'], { '2024-03': [okGame] }), {
-    username: 'kill_tester',
-    gameId: 'nope',
-    month: '2024-03',
-    ip: 'i',
-  })
+  const res = await ingest(deps, cfg, march, { ...req, month: '2024-3' })
+  expect(res).toMatchObject({ ok: false, status: 400, code: 'bad-request' })
+  expect(calls).toHaveLength(0)
+})
+
+test('a request without a game id is rejected before any lock', async () => {
+  const { deps, calls } = fakeDeps(() => ({}))
+  const res = await ingest(deps, cfg, march, { username: 'kill_tester', month: '2024-03', ip: 'i' })
+  expect(res).toMatchObject({ ok: false, status: 400, code: 'bad-request' })
+  expect(calls).toHaveLength(0)
+})
+
+test('a missing game id returns no-games and releases the lock', async () => {
+  const { deps, calls } = fakeDeps(() => ({}))
+  const res = await ingest(deps, cfg, march, { ...req, gameId: 'nope' })
   expect(res).toMatchObject({ ok: false, status: 404, code: 'no-games' })
   expect(byName(calls, 'DeleteCommand')).toHaveLength(1) // lock released, no job
-})
-
-test('pasted PGN needs no username, no lock, and gets stable game ids', async () => {
-  const { deps, calls } = fakeDeps((call) =>
-    call.name === 'GetQueueUrlCommand' ? { QueueUrl: 'http://q' } : {},
-  )
-  const res = await ingest(deps, cfg, stubChessCom([], {}), {
-    pgn: `${SCHOLARS}\n\n${SCHOLARS}`,
-    ip: 'i',
-  })
-  expect(res).toMatchObject({ ok: true, total: 2 })
-  const locks = calls.filter((c) => String(c.input.Item?.pk ?? c.input.Key?.pk).startsWith('LOCK#'))
-  expect(locks).toHaveLength(0)
-  const batch = byName(calls, 'BatchWriteCommand')[0].input.RequestItems.t
-  expect(batch.map((r: { PutRequest: { Item: { gameId: string } } }) => r.PutRequest.Item.gameId)).toEqual([
-    'pgn-1',
-    'pgn-2',
-  ])
-})
-
-test('an oversized PGN paste is rejected before parsing or any storage call', async () => {
-  const { deps, calls } = fakeDeps(() => ({}))
-  const res = await ingest(deps, cfg, stubChessCom([], {}), {
-    pgn: 'x'.repeat(2_000_001),
-    ip: 'i',
-  })
-  expect(res).toMatchObject({ ok: false, status: 422, code: 'archive-too-large' })
-  expect(calls).toHaveLength(0)
 })
 
 test('rotating usernames still trips the per-IP limiter', async () => {
@@ -227,18 +223,6 @@ test('rotating usernames still trips the per-IP limiter', async () => {
     if (call.name === 'UpdateCommand' && call.input.Key.pk === 'RATE#@ip#1.2.3.4') throw ccf()
     return {}
   })
-  const res = await ingest(deps, cfg, stubChessCom([], {}), { username: 'fresh_name', ip: '1.2.3.4' })
+  const res = await ingest(deps, cfg, march, { ...req, username: 'fresh_name' })
   expect(res).toMatchObject({ ok: false, status: 429, code: 'rate-limited' })
-})
-
-test('a PGN paste past the per-job cap is rejected before any job is created', async () => {
-  const { deps, calls } = fakeDeps(() => ({}))
-  const paste = Array.from({ length: 7 }, () => SCHOLARS).join('\n\n')
-  const res = await ingest(deps, { ...cfg, maxGamesPerJob: 5 }, stubChessCom([], {}), {
-    pgn: paste,
-    ip: 'i',
-  })
-  expect(res).toMatchObject({ ok: false, status: 422, code: 'archive-too-large' })
-  expect(byName(calls, 'PutCommand')).toHaveLength(0) // no job, no game items
-  expect(byName(calls, 'SendMessageBatchCommand')).toHaveLength(0)
 })

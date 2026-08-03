@@ -19,9 +19,10 @@ function etaSeconds(j: Record<string, unknown>, now: number): number | null {
   return Math.round((remaining * elapsedSec) / done)
 }
 
-// Public job view for the progress page. The partial-aggregate object rides
-// along so the teaser slot has real data to draw from once Phase 4 turns it
-// on; nothing secret lives on a job item anyway (results are public by link).
+// Public job view. The ring and partial aggregates ride along only because the
+// completion transaction still writes them — nothing reads them since the
+// progress page went away, and pruning them means editing that transaction.
+// Nothing secret lives on a job item anyway (results are public by link).
 export async function getJobView(
   deps: Deps,
   jobId: string,
@@ -33,7 +34,6 @@ export async function getJobView(
   const view: Record<string, unknown> = {
     jobId: j.jobId,
     username: j.username,
-    kind: j.kind ?? 'archive',
     gameId: j.gameId ?? null,
     status: j.status,
     total: j.total,
@@ -43,8 +43,6 @@ export async function getJobView(
     agg: j.agg,
     createdAt: j.createdAt,
     etaSeconds: etaSeconds(j, Date.now()),
-    // Present once finalized; the single read model for story, cards, and OG.
-    wrapped: j.wrapped ?? null,
   }
   if (includeFailures) {
     // Fetched once by the client when the job settles, not on every poll.

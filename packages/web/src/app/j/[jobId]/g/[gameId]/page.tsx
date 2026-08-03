@@ -282,16 +282,19 @@ export default function Report({ params }: { params: Promise<{ jobId: string; ga
   // second start() — and a rejected start keeps rejecting, so 'failed' stays
   // failed instead of flipping to 'ready'.
   const engineStartRef = useRef<Promise<void> | null>(null)
-  const [backHref, setBackHref] = useState(`/j/${jobId}/breakdown`)
+  // Home until the job tells us whose games list to go back to. It must NOT
+  // default to a per-job route: this renders before the getJob below resolves,
+  // and stays put if that request fails.
+  const [backHref, setBackHref] = useState('/')
   const plyInitedRef = useRef(false)
   const notFoundStreakRef = useRef(0)
   const netFailStreakRef = useRef(0)
 
-  // Back to the games list when this game was analyzed on its own.
+  // Back to the games list this game was analyzed from.
   useEffect(() => {
     let stop = false
     getJob(jobId).then((j) => {
-      if (!stop && j?.kind === 'single' && j.username) setBackHref(`/u/${j.username}`)
+      if (!stop && j?.username) setBackHref(`/u/${j.username}`)
     })
     return () => {
       stop = true

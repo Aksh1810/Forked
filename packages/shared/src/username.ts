@@ -3,7 +3,7 @@ const USERNAME_RE = /^[a-zA-Z0-9_-]{1,50}$/
 // Accepts a bare chess.com username, an @-prefixed handle, or a pasted
 // chess.com profile/stats URL, and returns the bare username (case as
 // entered) or null if nothing valid can be pulled out. Used on both the
-// browse and Wrapped forms so people can paste whatever they have copied.
+// browse form so people can paste whatever they have copied.
 export function normalizeUsername(raw: string): string | null {
   let s = raw.trim()
   if (!s) return null

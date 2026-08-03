@@ -13,7 +13,7 @@ runaway loop costs money; provisioned just throttles, and throttles page
 via the Read/WriteThrottleEvents alarms.
 
 Item sizes that matter: a game item is ~1-3KB (moves list), a job item
-~2-6KB (ring + partial aggregates, later the wrapped summary), an engine
+~2-6KB (ring + partial aggregates), an engine
 record ~4-12KB (per-ply evals). 1 WCU writes 1KB; 1 RCU reads 4KB strongly
 consistent (double for transactions, halve for eventually consistent).
 
@@ -23,22 +23,26 @@ counter and ring updates to job items do NOT replicate into the GSI; its
 
 | Path | Reads | Writes | Steady rate |
 |---|---|---|---|
-| POST /ingest (N games) | N cache Gets (~N RCU) + 1 budget read | rate + lock + job (~5 WCU) + N game puts (~2-3 WCU each) | burst, once per job |
+| POST /ingest | 1 cache Get (~1 RCU) + 1 budget read | rate + lock + job (~5 WCU) + 1 game put (~2-3 WCU) | once per job |
 | Worker game completion | job ring Get, cache Get (~3 RCU) | engine-record put (~5-10 WCU) + txn game+job (2x cost; up to ~15 WCU late in a big job as the job item grows) + metrics ADD + 2 GB-seconds ADDs (Lambda path) | ~0.05 games/s at concurrency 5 -> a few WCU/s worst case |
 | GET /job/:id poll | 1 Get (~1-2 RCU) | none | ~0.5-1 RCU/s per viewer at 2s |
-| Finalize (100 games) | full game Query + engine BatchGet (~100-200 RCU) | wrapped write (~6 WCU) | burst, once per job |
+| Finalize | none | status + completedAt write (~2 WCU) | once per job |
 | Janitor sweep | sparse GSI Query (~0 when healthy) | repairs only on drift | ~0 |
 | GET /metrics | 1 Get | none | per landing view |
 
-## Gate (c) arithmetic: one 100-game job + one polling viewer
+## Gate (c) arithmetic: ~100 concurrent single-game jobs + one polling viewer
 
-- Ingest burst: ~250 WCU over a few seconds. Provisioned throughput accrues
-  300 seconds of burst credits (20 WCU/s x 300s = 6000 WCU), so the batch
-  writes absorb cleanly; the SDK retries anything throttled.
+- Ingest burst: ~250 WCU over a few seconds (a job is one game now, so this is
+  100 jobs rather than one 100-game job; the per-job write cost is the same
+  handful of items either way). Provisioned throughput accrues 300 seconds of
+  burst credits (20 WCU/s x 300s = 6000 WCU), so the burst absorbs cleanly;
+  the SDK retries anything throttled.
 - Steady state while analyzing: ~1.7 WCU/s measured at Lambda concurrency 5
   (engine-record puts dominate; ~0.35 WCU/s per concurrent worker), plus
   viewer polls ~1 RCU/s. An order of magnitude under 20/20.
-- Finalize burst: ~200 RCU in one shot, again inside burst credits.
+- Finalize: ~2 WCU per job. It used to re-read every game and engine record
+  to build the wrapped summary (~200 RCU in one shot); with that gone it is
+  just the status flip.
 
 Measured on deploy day (gate c, 2026-07-08, 63-game erik job, us-east-1):
 ingest peak 168 WCU/min; steady 95-103 WCU/min while analyzing; finalize

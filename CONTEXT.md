@@ -15,42 +15,16 @@ game-specific, so two users' identical games share one record.
 **Game record** — everything about a game that is not the engine's opinion:
 players, clocks, result, date, opening. Joins an engine record at read time.
 
-**Analyzed game** — a game record joined with its engine record, plus which
-side the user played. The unit every insight is computed from.
-`packages/shared/src/walk.ts`.
-
-**Game walk** — one replay of an analyzed game, carrying everything a single
-pass over the move list can produce: the book prefix, per-ply phases, the
-terminal status, the opening family, the opponent, the user's own non-book
-moves, and per-side accuracy. Computed once per analyzed game and memoized;
-insights, archetype, and delighter all read it rather than replaying
-themselves. `packages/shared/src/walk.ts`.
-
-**User move** — one of the user's own non-book moves, carrying its
-win-probability loss, phase, clock, and outcome context. Book moves are
-excluded up front, matching classification.
-
 **Player color / outcome** — which side of a game a named user played, and how
 the game ended for that side (`w`/`l`/`d`/`?`). Chess.com usernames are
 case-insensitive; the folding rule lives in one place.
 `packages/shared/src/player.ts`.
 
 **Classification vs. display tier** — the *stored* classification is four
-values (`blunder | mistake | inaccuracy | none`) and feeds insights, accuracy,
-and accuracy. The chess.com-style *display tiers* (`brilliant`, `great`,
+values (`blunder | mistake | inaccuracy | none`) and feeds accuracy. The chess.com-style *display tiers* (`brilliant`, `great`,
 `best`, `excellent`, `good`, `book`, `inaccuracy`, `mistake`, `miss`,
 `blunder`) are re-derived at render time from the record, so re-tuning the
 bands re-labels old games with no re-analysis. `packages/shared/src/classify.ts`.
-
-**Wrapped summary** — the finished per-job story: accuracy, archetype,
-delighter, worst blunder, poison opening, time pressure, per-game rows.
-Produced once, at finalize. `packages/shared/src/wrapped.ts`.
-
-**Archetype** — exactly one label per job, chosen by an ordered rule table over
-computed features. Pure and total: the last rule always matches.
-
-**Delighter** — the one rotating weird-stat slot, whichever candidate is most
-statistically distinctive for this user. Deterministic, never random.
 
 ## Engine
 
@@ -62,14 +36,17 @@ this seam — a child process in the worker, a wasm Worker in the browser.
 
 ## Job lifecycle
 
-**Job** — one analysis request: an archive slice, a single game, or a PGN
-paste. Moves `ingesting -> analyzing -> finalizing -> complete | failed`.
+**Job** — one analysis request, for exactly one game. Moves
+`ingesting -> analyzing -> finalizing -> complete | failed`.
 
 **Ring entry** — one completed game as the live progress UI shows it
-(opponent, result, accuracy, plies). Written by the completion transaction.
+(opponent, result, accuracy, plies). Written by the completion transaction,
+and — like the partial aggregates below — no longer read by anything.
 
 **Partial aggregate** — running counters on the job item, updated race-free
-from the completion path. A preview only; the finalizer recomputes everything.
+from the completion path. Written but no longer read: the progress UI that
+consumed them is gone, and pruning them means editing the completion
+transaction, so that is deferred to its own change.
 
 ## Web
 

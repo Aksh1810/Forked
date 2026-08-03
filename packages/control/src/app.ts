@@ -56,9 +56,6 @@ export function makeApp(
     const ip = clientIp(c)
     const res = await ingest(deps, cfg, chesscom, {
       username: str('username'),
-      pgn: str('pgn'),
-      from: str('from'),
-      to: str('to'),
       gameId: str('gameId'),
       month: str('month'),
       ip,

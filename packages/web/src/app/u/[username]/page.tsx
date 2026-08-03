@@ -149,9 +149,9 @@ export default function Games({ params }: { params: Promise<{ username: string }
     }
     if (res.joined) {
       // The per-username lock may have handed back a job for a different
-      // game or the whole-archive flow; only follow it if it is really ours.
+      // game; only follow it if it is really ours.
       const job = await getJob(res.jobId)
-      if (job?.kind !== 'single' || job.gameId !== row.id) {
+      if (job?.gameId !== row.id) {
         setBusyId(null)
         setError(copy.errors.busy)
         return

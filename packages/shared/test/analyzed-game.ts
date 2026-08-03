@@ -1,5 +1,14 @@
-import type { AnalyzedGame } from '../src/insights.js'
-import type { Classification, Eval, PlyAnalysis } from '../src/schemas.js'
+import type { Classification, Eval, EngineRecord, GameRecord, PlyAnalysis } from '../src/schemas.js'
+
+// A game record joined with its engine record, plus which side the user
+// played. Only the tests build these now — the finalizer stopped needing a
+// whole-game view when the wrapped summary went away.
+interface AnalyzedGame {
+  gameId: string
+  userColor: 'white' | 'black' | null
+  game: GameRecord
+  record: EngineRecord
+}
 
 // Builds a synthetic AnalyzedGame from a real (legal) move list. Per-ply
 // overrides control classification, evalAfter, and book flag; everything else

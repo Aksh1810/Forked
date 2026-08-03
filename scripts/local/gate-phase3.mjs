@@ -6,7 +6,7 @@
 // Usage: API_BASE=http://localhost:8787 GATE_USER=erik GATE_MONTH=2025-06 \
 //        node scripts/local/gate-phase3.mjs
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
+import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 import { jobKey, lockKey } from '../../packages/shared/dist/index.js'
 import { releaseStaleLocks } from '../../packages/control/dist/src/index.js'
 import { assert, sleep } from './harness.mjs'
@@ -30,17 +30,40 @@ const post = (body) =>
     body: JSON.stringify(body),
   }).then((r) => r.json())
 
-// Gate c: a nonexistent username fails cleanly, in voice.
-const ghost = await post({ username: 'no_such_user_zzq_12345' })
+// Gate c: a nonexistent username fails cleanly, in voice. The request has to
+// be otherwise well-formed (game id + month) or validation rejects it before
+// ingest ever asks chess.com who this is.
+const ghost = await post({ username: 'no_such_user_zzq_12345', gameId: 'g-nope', month: MONTH })
 assert(ghost.code === 'user-not-found', `gate c: nonexistent username -> ${ghost.message}`)
 
-// Gate a (start): a real, capped archive ingests and begins analyzing.
-const start = await post({ username: USER, from: MONTH, to: MONTH })
-assert(start.ok && start.total > 0, `gate a: ingested ${start.total} games (job ${start.jobId})`)
+// A job is one game, so the gate picks one off the browse list first.
+const browse = await fetch(`${API}/games/${USER}?month=${MONTH}`).then((r) => r.json())
+const target = browse.games?.find((g) => g.id && !g.rejected)
+assert(target, `gate a (setup): ${USER} has a game in ${MONTH} to analyze`)
+const one = { username: USER, gameId: target.id, month: MONTH }
 
-// Gate b: a concurrent duplicate submission joins the running job.
-const dup = await post({ username: USER, from: MONTH, to: MONTH })
-assert(dup.joined === true && dup.jobId === start.jobId, 'gate b: duplicate submission joined the running job')
+// Gate b first, against a seeded lock. Racing two live posts is no longer a
+// reliable way to see the join: a job is one game now, and a cache-hit game
+// finalizes — releasing the per-username lock — inside the ingest call itself,
+// so the second post can legitimately find no lock and create its own job. The
+// lock item IS the thing the join keys off, so seed it directly and assert the
+// join deterministically, warm cache or cold.
+await ddb.send(
+  new PutCommand({
+    TableName: deps.table,
+    Item: { ...lockKey(USER), jobId: 'already-running', leaseExpiry: Date.now() + 60_000 },
+  }),
+)
+const dup = await post(one)
+assert(
+  dup.joined === true && dup.jobId === 'already-running',
+  'gate b: a submission for a locked username joined the running job',
+)
+await ddb.send(new DeleteCommand({ TableName: deps.table, Key: lockKey(USER) }))
+
+// Gate a: a real game ingests and begins analyzing.
+const start = await post(one)
+assert(start.ok && start.total > 0, `gate a: ingested ${start.total} games (job ${start.jobId})`)
 
 // Gate d: an orphaned lock (ingest killed after acquire, before job creation)
 // is released within one janitor sweep; live locks are kept.

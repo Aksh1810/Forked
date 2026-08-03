@@ -1,4 +1,5 @@
 import { Chess, castlingSide, normalizeMove } from 'chessops/chess'
+import { makeFen } from 'chessops/fen'
 import { parsePgn, type Game, type PgnNodeData } from 'chessops/pgn'
 import { makeSanAndPlay, parseSan } from 'chessops/san'
 import { makeUci, parseUci } from 'chessops/util'
@@ -56,7 +57,7 @@ function rating(v: string | undefined): number | null {
 // chess.com occasionally sends a player name as the literal string "undefined"
 // (closed accounts, some bots). Normalize those and blanks to a stable
 // placeholder so the UI never says "against undefined". Length-capped: header
-// values are attacker-supplied on the PGN-paste path and get stored in game
+// values come from chess.com and get stored in game
 // records; chess.com usernames max out around 25 characters.
 function playerName(v: string | undefined): string {
   const n = v?.trim().slice(0, 60)
@@ -72,11 +73,6 @@ export function parseGamePgn(text: string): ParsedGame | PgnRejection {
   const game = games[0]
   if (!game) return { ok: false, code: 'empty', message: 'No game found in PGN.' }
   return parseGame(game)
-}
-
-// Multi-game PGN paste: each game in the text parses or rejects on its own.
-export function parseAllGamesPgn(text: string): (ParsedGame | PgnRejection)[] {
-  return parsePgn(text).map(parseGame)
 }
 
 function parseGame(game: Game<PgnNodeData>): ParsedGame | PgnRejection {
@@ -137,27 +133,40 @@ function parseGame(game: Game<PgnNodeData>): ParsedGame | PgnRejection {
   }
 }
 
+// Resolves one standard-UCI move against a position, or null if it will not go.
+// normalizeMove converts standard-UCI castling (e1g1) back to the
+// king-takes-rook form chessops uses internally; every replay below resolves
+// through here, so that conversion can never be forgotten in one of them.
+function legalMove(pos: Chess, uci: string): Move | null {
+  const raw = parseUci(uci)
+  const move = raw && normalizeMove(pos, raw)
+  return move && pos.isLegal(move) ? move : null
+}
+
+// Resolve and play, for the replays that don't need the move itself.
+function playUci(pos: Chess, uci: string): Move | null {
+  const move = legalMove(pos, uci)
+  if (move) pos.play(move)
+  return move
+}
+
 // Replays `prefix` then `uciMoves` from the standard start and returns the SAN
-// for each of `uciMoves` (not `prefix`). Same replay pattern as `finalStatus`
-// and `fenBeforePly`: parseUci + normalizeMove so standard-UCI castling
-// (e1g1) round-trips through chessops' king-takes-rook internal form. Used
-// for both the game move list (`sanMoves(record.uciMoves)`) and a PV line
-// (`sanMoves(p.pv, record.uciMoves.slice(0, p.ply - 1))`). An unreplayable
-// move (shouldn't happen; these lists already replayed cleanly at ingest)
-// stops the walk and returns whatever SANs were produced so far.
+// for each of `uciMoves` (not `prefix`). Used for both the game move list
+// (`sanMoves(record.uciMoves)`) and a PV line (`sanMoves(p.pv,
+// record.uciMoves.slice(0, p.ply - 1))`). An unreplayable move (shouldn't
+// happen; these lists already replayed cleanly at ingest) stops the walk and
+// returns whatever SANs were produced so far.
 export function sanMoves(uciMoves: readonly string[], prefix: readonly string[] = []): string[] {
   const pos = Chess.default()
   for (const u of prefix) {
-    const raw = parseUci(u)
-    const move = raw && normalizeMove(pos, raw)
-    if (!move || !pos.isLegal(move)) return []
-    pos.play(move)
+    if (!playUci(pos, u)) return []
   }
   const out: string[] = []
   for (const u of uciMoves) {
-    const raw = parseUci(u)
-    const move = raw && normalizeMove(pos, raw)
-    if (!move || !pos.isLegal(move)) break
+    // SAN has to be made from the position BEFORE the move, so this resolves
+    // and plays in one step via makeSanAndPlay rather than calling playUci.
+    const move = legalMove(pos, u)
+    if (!move) break
     out.push(makeSanAndPlay(pos, move))
   }
   return out
@@ -168,12 +177,19 @@ export function sanMoves(uciMoves: readonly string[], prefix: readonly string[] 
 export function finalStatus(uciMoves: readonly string[]): 'checkmate' | 'stalemate' | null {
   const pos = Chess.default()
   for (const [i, u] of uciMoves.entries()) {
-    const raw = parseUci(u)
-    // normalizeMove converts standard-UCI castling (e1g1) back to the
-    // king-takes-rook form chessops uses internally.
-    const move = raw && normalizeMove(pos, raw)
-    if (!move || !pos.isLegal(move)) throw new Error(`illegal uci move "${u}" at ply ${i + 1}`)
-    pos.play(move)
+    if (!playUci(pos, u)) throw new Error(`illegal uci move "${u}" at ply ${i + 1}`)
   }
   return pos.isCheckmate() ? 'checkmate' : pos.isStalemate() ? 'stalemate' : null
+}
+
+// Replays the move list to the position BEFORE ply p (1-indexed) and returns
+// its FEN, for the review board's diagrams. Falls back to the start position
+// if a stored move is unreplayable (should not happen; the same list already
+// replayed cleanly at ingest).
+export function fenBeforePly(uciMoves: readonly string[], ply: number): string {
+  const pos = Chess.default()
+  for (let i = 0; i < ply - 1 && i < uciMoves.length; i++) {
+    if (!playUci(pos, uciMoves[i])) break
+  }
+  return makeFen(pos.toSetup())
 }

@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import {
-  BatchWriteCommand,
   DeleteCommand,
   GetCommand,
   PutCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
-import { SendMessageBatchCommand } from '@aws-sdk/client-sqs'
+import { SendMessageCommand } from '@aws-sdk/client-sqs'
 import {
   PINNED_ENGINE_VERSION,
   analyzingGsiAttrs,
@@ -17,7 +16,6 @@ import {
   jobKey,
   lockKey,
   metricsKey,
-  parseAllGamesPgn,
   playerColor,
   rateKey,
   type GameItem,
@@ -34,13 +32,10 @@ import { UserNotFoundError, type ArchiveGame, type ChessCom } from './chesscom.j
 import type { ControlConfig } from './env.js'
 import { makeRouter } from './route.js'
 
+// A job is exactly one game: the archive game id plus the month it lives in,
+// for a chess.com user. All three are required.
 export interface IngestRequest {
   username?: string
-  pgn?: string
-  from?: string // 'YYYY-MM', inclusive
-  to?: string
-  // Single-game analyze from the browse list: the archive game id plus the
-  // month it lives in. Both required together; builds a one-game job.
   gameId?: string
   month?: string
   ip: string
@@ -50,7 +45,6 @@ export type IngestErrorCode =
   | 'bad-request'
   | 'user-not-found'
   | 'no-games'
-  | 'archive-too-large'
   | 'rate-limited'
   | 'busy'
   | 'upstream'
@@ -69,18 +63,11 @@ const err = (status: number, code: IngestErrorCode, message: string): IngestResp
 const USERNAME_RE = /^[a-zA-Z0-9_-]{1,50}$/
 const MONTH_RE = /^\d{4}-\d{2}$/
 
-// Paste-path ceiling checked BEFORE parsing: maxGamesPerJob only counts games
-// after the whole text is parsed, so without this a single multi-megabyte POST
-// buys an unbounded chessops parse. ~2MB comfortably covers 500 real games.
-const MAX_PGN_CHARS = 2_000_000
-
-// The initial lock lease only needs to cover the archive fetch; once the job
+// The initial lock lease only needs to cover the game fetch; once the job
 // exists the lease is extended to the job's deadline, so an active job keeps
 // its lock and an ingest killed mid-fetch leaves a lock the janitor sweep
 // releases as soon as this lease expires.
 const INGEST_LEASE_MS = 10 * 60_000
-
-class ArchiveTooLargeError extends Error {}
 
 export async function ingest(
   deps: Deps,
@@ -89,25 +76,18 @@ export async function ingest(
   req: IngestRequest,
 ): Promise<IngestResponse> {
   const username = req.username?.trim().toLowerCase() || null
-  if (!username && !req.pgn?.trim()) {
-    return err(400, 'bad-request', 'Provide a chess.com username or PGN text.')
-  }
-  if (username && !USERNAME_RE.test(username)) {
+  if (!username || !USERNAME_RE.test(username)) {
     return err(400, 'bad-request', 'That does not look like a chess.com username.')
   }
-  for (const m of [req.from, req.to, req.month]) {
-    if (m && !MONTH_RE.test(m)) return err(400, 'bad-request', 'Months must look like 2026-07.')
+  if (req.month && !MONTH_RE.test(req.month)) {
+    return err(400, 'bad-request', 'Months must look like 2026-07.')
   }
-  const single = Boolean(req.gameId)
-  if (single && (!username || !req.month)) {
-    return err(400, 'bad-request', 'Analyzing one game needs a username and its month.')
-  }
-  if (req.pgn && req.pgn.length > MAX_PGN_CHARS) {
-    return err(422, 'archive-too-large', 'That PGN paste is too large. Split it into smaller batches.')
+  if (!req.gameId || !req.month) {
+    return err(400, 'bad-request', 'Analyzing a game needs its id and the month it was played.')
   }
 
   try {
-    await bumpRate(deps, username ?? 'pgn-paste', req.ip, cfg.ratePerDay)
+    await bumpRate(deps, username, req.ip, cfg.ratePerDay)
     // Second, coarser limiter on the IP alone: the per-(username, ip) counter
     // above resets with every new username, so rotating usernames would
     // otherwise buy unlimited jobs from one address. '@ip' cannot collide
@@ -121,47 +101,29 @@ export async function ingest(
   }
 
   const jobId = randomUUID()
-  if (username) {
-    const lock = await acquireLock(deps, username, jobId)
-    if (lock !== 'acquired') return lock
-  }
+  const lock = await acquireLock(deps, username, jobId)
+  if (lock !== 'acquired') return lock
 
   let jobCreated = false
   try {
-    const games = single
-      ? await fetchSingleGame(chesscom, username as string, req)
-      : username
-        ? await fetchArchiveGames(cfg, chesscom, username, req)
-        : pastedGames(req.pgn ?? '')
-    // The archive fetch enforces this while fetching; the paste path must
-    // enforce it too or a single POST creates an unbounded job.
-    if (games.length > cfg.maxGamesPerJob) throw new ArchiveTooLargeError()
-    if (games.length === 0) {
-      return single
-        ? err(404, 'no-games', 'That game is not in this account and month.')
-        : err(404, 'no-games', 'This account has no games in that range.')
+    const game = await fetchSingleGame(chesscom, username, req.gameId, req.month)
+    if (!game) {
+      return err(404, 'no-games', 'That game is not in this account and month.')
     }
 
-    await createJobRecords(deps, cfg, jobId, username, games, single ? 'single' : 'archive')
+    await createJobRecords(deps, cfg, jobId, username, game)
     jobCreated = true
-    return { ok: true, jobId, joined: false, total: games.length }
+    return { ok: true, jobId, joined: false, total: 1 }
   } catch (e) {
     if (e instanceof UserNotFoundError) {
       return err(404, 'user-not-found', 'That username does not exist on chess.com.')
     }
-    if (e instanceof ArchiveTooLargeError) {
-      return err(
-        422,
-        'archive-too-large',
-        `That archive has more than ${cfg.maxGamesPerJob} games. Pick a date range.`,
-      )
-    }
     log('error', 'ingest failed', { jobId, username, error: String(e) })
-    return err(502, 'upstream', 'Could not fetch that archive right now. Try again in a minute.')
+    return err(502, 'upstream', 'Could not fetch that game right now. Try again in a minute.')
   } finally {
     // Every path that did not produce a job releases the lock immediately
     // rather than making the user wait out the lease.
-    if (username && !jobCreated) await releaseLock(deps, username, jobId)
+    if (!jobCreated) await releaseLock(deps, username, jobId)
   }
 }
 
@@ -235,55 +197,23 @@ async function releaseLock(deps: Deps, username: string, jobId: string): Promise
     .catch(() => {}) // already swept or re-acquired; nothing to release
 }
 
-// Months newest first, so the per-job cap lands on the user's most recent
-// games and oversized archives abort without fetching all of history.
-async function fetchArchiveGames(
-  cfg: ControlConfig,
-  chesscom: ChessCom,
-  username: string,
-  req: IngestRequest,
-): Promise<ArchiveGame[]> {
-  const months = await chesscom.listMonths(username)
-  const inRange = months
-    .filter((m) => (!req.from || m >= req.from) && (!req.to || m <= req.to))
-    .reverse()
-  const picked: ArchiveGame[] = []
-  let accepted = 0
-  for (const month of inRange) {
-    const games = await chesscom.monthGames(username, month)
-    picked.push(...games)
-    accepted += games.filter((g) => g.game).length
-    if (accepted > cfg.maxGamesPerJob) throw new ArchiveTooLargeError()
-  }
-  return picked
-}
-
 // One game from the browse list: re-fetched from the (cached) month by id, so
 // the analyze path never trusts client-supplied moves. A rejected game still
 // flows through as a one-game job that fails that game (report shows why).
 async function fetchSingleGame(
   chesscom: ChessCom,
   username: string,
-  req: IngestRequest,
-): Promise<ArchiveGame[]> {
-  const games = await chesscom.monthGames(username, req.month as string)
-  const g = games.find((x) => x.id === req.gameId)
-  return g ? [g] : []
-}
-
-function pastedGames(pgn: string): ArchiveGame[] {
-  return parseAllGamesPgn(pgn).map((p, i) => ({
-    id: `pgn-${i + 1}`,
-    endTime: 0,
-    game: p.ok ? p : null,
-    rejection: p.ok ? null : { code: p.code, message: p.message },
-  }))
+  gameId: string,
+  month: string,
+): Promise<ArchiveGame | null> {
+  const games = await chesscom.monthGames(username, month)
+  return games.find((x) => x.id === gameId) ?? null
 }
 
 function toGameItem(
   jobId: string,
   g: ArchiveGame,
-  username: string | null,
+  username: string,
   nodeBudget: number,
   now: string,
 ): GameItem & { pk: string; sk: string } {
@@ -321,16 +251,16 @@ async function createJobRecords(
   deps: Deps,
   cfg: ControlConfig,
   jobId: string,
-  username: string | null,
-  games: ArchiveGame[],
-  kind: 'archive' | 'single',
+  username: string,
+  game: ArchiveGame,
 ): Promise<void> {
   const now = new Date()
-  const items = games.map((g) => toGameItem(jobId, g, username, cfg.nodeBudget, now.toISOString()))
-  const rejected = items.filter((i) => i.status === 'failed').length
-  // ponytail: deadline heuristic, 10 minutes of slack plus 30s per game; the
-  // janitor recount makes an optimistic deadline self-correcting.
-  const deadline = new Date(now.getTime() + 10 * 60_000 + (items.length - rejected) * 30_000)
+  const item = toGameItem(jobId, game, username, cfg.nodeBudget, now.toISOString())
+  // Rejected at ingest: failed at birth, so it never sees a queue or a worker.
+  const rejected = item.status === 'failed'
+  // ponytail: deadline heuristic, 10 minutes of slack plus 30s for the game;
+  // the janitor recount makes an optimistic deadline self-correcting.
+  const deadline = new Date(now.getTime() + 10 * 60_000 + (rejected ? 0 : 30_000))
 
   await deps.ddb.send(
     new PutCommand({
@@ -340,15 +270,14 @@ async function createJobRecords(
         ...analyzingGsiAttrs(deadline.toISOString()),
         jobId,
         username,
-        // A single-game job carries its one game id so /j/:id can route
-        // straight to the report instead of rendering a one-game story.
-        ...(kind === 'single' ? { kind, gameId: games[0]?.id } : {}),
+        // The job's one game id, so /j/:id can route straight to the report.
+        gameId: game.id,
         status: 'analyzing',
-        total: items.length,
+        total: 1,
         completed: 0,
-        // Initial value, not a counter increment: games rejected at ingest
-        // are counted here once and never touched by the completion path.
-        failed: rejected,
+        // Initial value, not a counter increment: a game rejected at ingest is
+        // counted here once and never touched by the completion path.
+        failed: rejected ? 1 : 0,
         nodeBudget: cfg.nodeBudget,
         ring: [],
         agg: emptyPartialAgg(),
@@ -358,76 +287,51 @@ async function createJobRecords(
     }),
   )
 
-  type BatchItems = NonNullable<
-    NonNullable<ConstructorParameters<typeof BatchWriteCommand>[0]>['RequestItems']
-  >
-  for (let i = 0; i < items.length; i += 25) {
-    let batch: BatchItems = {
-      [deps.table]: items.slice(i, i + 25).map((Item) => ({ PutRequest: { Item } })),
-    }
-    while (Object.keys(batch).length > 0) {
-      const out = await deps.ddb.send(new BatchWriteCommand({ RequestItems: batch }))
-      batch = out.UnprocessedItems ?? {}
-      if (Object.keys(batch).length > 0) await new Promise((r) => setTimeout(r, 200))
+  await deps.ddb.send(new PutCommand({ TableName: deps.table, Item: item }))
+
+  // A cache hit completes through THE transaction right now, without ever
+  // touching the queue; a miss is routed (container vs Lambda) and enqueued.
+  let hit = false
+  let enqueued = false
+  if (!rejected) {
+    const record = await getEngineRecord(deps, item.cacheKey)
+    if (record) {
+      hit = true
+      const outcome = buildDoneOutcome(
+        { gameId: item.gameId, uciMoves: item.uciMoves, userColor: item.userColor, game: item.game },
+        record,
+        0,
+      )
+      if ((await executeCompletion(deps, jobId, item.gameId, outcome)) === 'applied') {
+        await tryFinalize(deps, jobId)
+      }
+    } else {
+      const pick = await makeRouter(deps, cfg)
+      await deps.sqs.send(
+        new SendMessageCommand({
+          QueueUrl: pick(item.uciMoves.length, item.nodeBudget),
+          MessageBody: JSON.stringify({ jobId, gameId: item.gameId }),
+        }),
+      )
+      enqueued = true
     }
   }
 
-  // Cache hits complete through THE transaction right now, without ever
-  // touching the queue; misses are routed per game (container vs Lambda) and
-  // enqueued in per-queue buckets.
-  const pick = await makeRouter(deps, cfg)
-  const toSend = new Map<string, string[]>() // queue URL -> game ids
-  let hits = 0
-  let enqueued = 0
-  for (const item of items) {
-    if (item.status !== 'pending') continue
-    const record = await getEngineRecord(deps, item.cacheKey)
-    if (!record) {
-      const url = pick(item.uciMoves.length, item.nodeBudget)
-      toSend.set(url, [...(toSend.get(url) ?? []), item.gameId])
-      enqueued += 1
-      continue
-    }
-    hits += 1
-    const outcome = buildDoneOutcome(
-      { gameId: item.gameId, uciMoves: item.uciMoves, userColor: item.userColor, game: item.game },
-      record,
-      0,
-    )
-    if ((await executeCompletion(deps, jobId, item.gameId, outcome)) === 'applied') {
-      await tryFinalize(deps, jobId)
-    }
-  }
-  for (const [queueUrl, gameIds] of toSend) {
-    for (let i = 0; i < gameIds.length; i += 10) {
-      await deps.sqs.send(
-        new SendMessageBatchCommand({
-          QueueUrl: queueUrl,
-          Entries: gameIds.slice(i, i + 10).map((gameId, j) => ({
-            Id: String(j),
-            MessageBody: JSON.stringify({ jobId, gameId }),
-          })),
-        }),
-      )
-    }
-  }
   // A job with nothing pending (all cache hits or all rejects) finalizes now;
   // no completion transaction will ever run for it again.
-  if (enqueued === 0) await tryFinalize(deps, jobId)
+  if (!enqueued) await tryFinalize(deps, jobId)
 
-  if (username) {
-    await deps.ddb
-      .send(
-        new UpdateCommand({
-          TableName: deps.table,
-          Key: lockKey(username),
-          ConditionExpression: 'jobId = :j',
-          UpdateExpression: 'SET leaseExpiry = :e',
-          ExpressionAttributeValues: { ':j': jobId, ':e': deadline.getTime() },
-        }),
-      )
-      .catch(() => {}) // lock swept mid-ingest; the janitor owns that case
-  }
+  await deps.ddb
+    .send(
+      new UpdateCommand({
+        TableName: deps.table,
+        Key: lockKey(username),
+        ConditionExpression: 'jobId = :j',
+        UpdateExpression: 'SET leaseExpiry = :e',
+        ExpressionAttributeValues: { ':j': jobId, ':e': deadline.getTime() },
+      }),
+    )
+    .catch(() => {}) // lock swept mid-ingest; the janitor owns that case
 
   await deps.ddb
     .send(
@@ -435,10 +339,10 @@ async function createJobRecords(
         TableName: deps.table,
         Key: metricsKey(now.toISOString().slice(0, 10)),
         UpdateExpression: 'ADD jobsCreated :one, gamesIngested :g, cacheHits :h',
-        ExpressionAttributeValues: { ':one': 1, ':g': items.length, ':h': hits },
+        ExpressionAttributeValues: { ':one': 1, ':g': 1, ':h': hit ? 1 : 0 },
       }),
     )
     .catch((e) => log('warn', 'metrics tick failed', { jobId, error: String(e) }))
 
-  log('info', 'job created', { jobId, username, total: items.length, rejected, hits, enqueued })
+  log('info', 'job created', { jobId, username, gameId: game.id, rejected, hit, enqueued })
 }

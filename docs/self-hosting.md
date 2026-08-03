@@ -40,13 +40,13 @@ cache keys consistent with the Dockerfile builds.
 | LAMBDA_QUEUE_NAME | control | unset (everything routes to the container queue) |
 | GB_SECONDS_BUDGET / ESTIMATED_NPS | control | `300000` / `350000` |
 | NODE_BUDGET | control | `600000` engine nodes per position |
-| MAX_GAMES_PER_JOB | control | `500` |
 | RATE_PER_DAY | control | `5` analyses per username+IP per day |
 | CONTACT_EMAIL | control | yours; goes in the chess.com User-Agent, per their etiquette |
 | STOCKFISH_PATH | worker | `stockfish` on PATH |
 | WORKER_MODE | worker | `worker`; set `dlq` to run the dead-letter consumer |
 | PORT / JANITOR_MS | control local server | `8787` / `30000` |
 | NEXT_PUBLIC_API_BASE | web | `http://localhost:8787` |
+| NEXT_PUBLIC_SITE_ORIGIN | web | `http://localhost:3000` |
 
 Set `CONTACT_EMAIL` to your own address. chess.com asks that automated
 clients identify themselves with a reachable contact, and this project

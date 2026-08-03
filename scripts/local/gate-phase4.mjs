@@ -1,6 +1,6 @@
 // Phase 4 backend gate demo against the local stack (jvm-stack + control API +
 // worker pool). Drives the finalizer race, the janitor counter repair, the
-// janitor requeue convergence, and prints the real archetype for eyeballing.
+// janitor requeue convergence.
 //
 // Usage: node scripts/local/gate-phase4.mjs
 import { randomUUID } from 'node:crypto'
@@ -88,19 +88,8 @@ const seed = generateGames(3, { seed: 11 })
 const primed = await createJob(seed, { nodeBudget: BUDGET, username: 'gate4' })
 const primedJob = await waitForJob(primed.jobId, 300_000)
 assert(primedJob.status === 'complete', `primed job complete (${primedJob.status})`)
-assert(primedJob.wrapped && primedJob.wrapped.archetype, 'primed job carries a wrapped summary with an archetype')
 const specs = await doneGameSpecs(primed.jobId)
 assert(specs.length === 3, `captured ${specs.length} real engine records for reuse`)
-
-// ------- GATE e: real job produces a defensible archetype -------
-console.log('\n### GATE e: archetype on a real job')
-const w = primedJob.wrapped
-console.log(`archetype: ${w.archetype.name} (${w.archetype.key}) mark=${w.archetype.mark}`)
-console.log(`  "${w.archetype.description}"`)
-console.log(`  accuracy=${w.accuracy?.toFixed(1)} games=${w.totalGames} positions=${w.totalPositions}`)
-console.log(`  poison=${JSON.stringify(w.poisonOpening)} worstBlunder.loss=${w.worstBlunder?.lossPct}`)
-console.log(`  delighter=${JSON.stringify(w.delighter)}`)
-assert(w.archetype.key && w.archetype.description, 'gate e: archetype has a name and a stat-backed line')
 
 // ------- GATE b: corrupt a job counter, janitor recounts and completes -------
 console.log('\n### GATE b: janitor repairs a corrupted counter')
@@ -118,7 +107,6 @@ const rep1 = await runJanitor(deps, { queueName: 'analysis-tasks' })
 const fixed = await waitForJob(corruptId, 60_000)
 assert(fixed.status === 'complete', `gate b: job completed after janitor recount (${fixed.status})`)
 assert(fixed.completed === 3 && fixed.failed === 0, `gate b: counters repaired from game items (completed=${fixed.completed})`)
-assert(fixed.wrapped && fixed.wrapped.archetype, 'gate b: finalized with a wrapped summary')
 assert(rep1.jobsRepaired >= 1 && rep1.jobsFinalized >= 1, 'gate b: janitor reported the repair and finalize')
 
 // ------- GATE c: games stuck pending with no messages, janitor requeues -------
@@ -180,7 +168,9 @@ await sqs.send(
 const race = await waitForJob(raceId, 120_000)
 assert(race.status === 'complete', `gate a: race job completed (${race.status})`)
 assert(race.completed === 2 && race.failed === 0, `gate a: exact counters (completed=${race.completed})`)
-assert(race.wrapped && race.wrapped.generatedAt, 'gate a: exactly one wrapped summary written')
+// The finalizer's own side effects: it stamped the completion and cleared the
+// sweep marker, so the janitor will not pick this job up again.
+assert(race.completedAt && !race.gsi1pk, 'gate a: finalizer wrote the completion and cleared the sweep marker')
 console.log('  (worker logs should show exactly one "job finalized" line for this jobId)')
 console.log(`  raceJobId=${raceId}`)
 

@@ -14,7 +14,6 @@ export interface ControlConfig {
   // Crude single-core Stockfish throughput used by the routing estimate.
   estimatedNps: number
   contactEmail: string
-  maxGamesPerJob: number
   nodeBudget: number
   ratePerDay: number
   port: number
@@ -33,7 +32,6 @@ export function loadControlConfig(env: NodeJS.ProcessEnv = process.env): Control
     // chess.com API etiquette requires a descriptive User-Agent with a
     // reachable contact.
     contactEmail: env.CONTACT_EMAIL ?? 'contact-unset@example.com',
-    maxGamesPerJob: Number(env.MAX_GAMES_PER_JOB ?? 500),
     nodeBudget: Number(env.NODE_BUDGET ?? 600_000),
     ratePerDay: Number(env.RATE_PER_DAY ?? 5),
     port: Number(env.PORT ?? 8787),

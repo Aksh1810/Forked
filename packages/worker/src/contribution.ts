@@ -32,7 +32,7 @@ export function buildDoneOutcome(
   const phases = gamePhases(game.uciMoves, bookPlies)
   const family = openingFamily(game.game.eco, game.game.openingName)
   const contribution = gameAggContribution(record, phases, terminal, game.userColor, family)
-  // Chips are from the user's perspective; a PGN-paste job with no matched
+  // Chips are from the user's perspective; a game with no matched
   // username falls back to White's.
   const color = game.userColor ?? 'white'
   return {

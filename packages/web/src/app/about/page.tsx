@@ -17,8 +17,7 @@ export default function About() {
       </h1>
       <p>
         {BRAND_NAME} shows every game from your chess.com history, and runs a full engine
-        breakdown on any one of them. It can also judge your whole history at once and hand you
-        a Wrapped-style story. It is free and open source.
+        breakdown on any one of them. It is free and open source.
       </p>
       <p>
         Results are public, reachable only by their unguessable link. The games themselves are

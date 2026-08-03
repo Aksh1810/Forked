@@ -205,57 +205,6 @@ kbd {
   );
 }
 
-/* Centered vignette for full-height ambient screens (the analyze/progress
-   wait): darkens the middle so counters stay legible over the glitch field. */
-.ambient-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 60% 55% at 50% 48%,
-    var(--void) 0%,
-    var(--void) 26%,
-    color-mix(in srgb, var(--void) 80%, transparent) 54%,
-    transparent 82%
-  );
-}
-
-/* Story: a segmented progress bar (replaces the cryptic . ? ! marks) and a
-   bounded, centered frame so each slide reads as one contained thing over the
-   ambient field instead of floating in the void. */
-.story-progress {
-  display: flex;
-  gap: 6px;
-  padding: 6px 2px 2px;
-  max-width: 440px;
-  margin: 0 auto;
-  width: 100%;
-}
-.story-seg {
-  flex: 1;
-  background: none;
-  border: none;
-  cursor: pointer;
-  height: 34px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-}
-.story-seg-fill {
-  width: 100%;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--line);
-  transition: background 200ms ease;
-}
-.story-seg-fill[data-state='done'] {
-  background: var(--muted);
-}
-.story-seg-fill[data-state='current'] {
-  background: var(--bone);
-}
-
 /* Checkmate flourish overlay (win = confetti, loss = somber vignette). Fixed
    and non-interactive so it never blocks the board. */
 .fx-overlay {
@@ -383,45 +332,6 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-}
-
-/* Card share actions: one prominent primary, a uniform secondary cluster. */
-.share-row {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  margin-top: 18px;
-}
-.share-primary {
-  width: auto;
-  min-width: 220px;
-  padding: 0 28px;
-  margin-top: 0;
-}
-.share-secondary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-}
-
-.story-frame {
-  width: 100%;
-  max-width: 440px;
-  margin: 0 auto;
-  min-height: min(600px, 66vh);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 32px 30px;
-  background: linear-gradient(180deg, var(--surface-2), color-mix(in srgb, var(--surface) 86%, transparent));
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  backdrop-filter: blur(8px);
-  box-shadow:
-    0 30px 80px -30px rgba(0, 0, 0, 0.85),
-    inset 0 1px 0 color-mix(in srgb, var(--bone) 7%, transparent);
 }
 
 /* The hero "console": a glass panel holding the input, CTA, and links so the
@@ -631,25 +541,6 @@ kbd {
   margin: 10px 0 0;
 }
 
-.expand-row {
-  display: grid;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.range-row {
-  display: flex;
-  gap: 10px;
-}
-
-.range-row label {
-  flex: 1;
-  color: var(--muted);
-  font-size: 0.875rem;
-  display: grid;
-  gap: 4px;
-}
-
 .ticker {
   color: var(--muted);
   margin-top: 3rem;
@@ -686,15 +577,6 @@ kbd {
   border-top: 1px solid var(--line);
 }
 
-/* Progress page */
-.progress-main {
-  min-height: calc(100dvh - 80px);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1.25rem;
-}
-
 /* The eval bar: the one universal progress and loading element. Light fill
    on a pure black track. */
 .eval-bar {
@@ -704,20 +586,13 @@ kbd {
   overflow: hidden;
 }
 
-.eval-bar-fill {
-  height: 100%;
-  background: var(--bone);
-  transition: width 600ms ease-out;
-}
-
 /* Indeterminate sweep for a single-game wait: reuses the .eval-bar track. */
 .analyzing-sweep {
   height: 100%;
   width: 40%;
   border-radius: 6px;
   background: var(--bone);
-  /* D1: one shimmer duration (1.4s) across .skeleton-row/.skeleton-panel/
-     .analyzing-sweep. */
+  /* D1: one shimmer duration (1.4s) shared with .skeleton-row. */
   animation: sweep 1.4s ease-in-out infinite;
 }
 
@@ -730,31 +605,11 @@ kbd {
   }
 }
 
-.big-counter {
-  font-size: clamp(2rem, 1rem + 4vw, 3.25rem);
-  font-weight: 500;
-  line-height: 1.1;
-}
-
-.counter-label {
-  color: var(--muted);
-  font-size: 0.875rem;
-}
-
 .status-line {
   color: var(--bone);
   /* K5: two lines' worth — the 4s status-line retype can wrap onto a second
      line, and a 1-line reservation let that shift everything below it. */
   min-height: 3rem;
-  margin: 0;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  list-style: none;
-  padding: 0;
   margin: 0;
 }
 
@@ -786,21 +641,6 @@ kbd {
   font-size: 0.875rem;
 }
 
-.failures {
-  list-style: none;
-  padding: 0;
-  margin: 8px 0 0;
-  display: grid;
-  gap: 6px;
-}
-
-.failures li {
-  color: var(--muted);
-  font-size: 0.875rem;
-  border-left: 2px solid var(--line);
-  padding-left: 10px;
-}
-
 /* Dashboard: 1080px grid */
 .dash {
   max-width: 1080px;
@@ -817,47 +657,6 @@ kbd {
   margin: 8px 0 24px;
 }
 
-.dash-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-/* F1: breakdown dashboard KPI strip — 4 stat tiles above the chart grid. */
-.kpi-strip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.kpi-label {
-  font-size: var(--fs-caption);
-  color: var(--muted);
-}
-.kpi-value {
-  font-size: var(--fs-title);
-  font-weight: 700;
-}
-.kpi-context {
-  font-size: var(--fs-caption);
-  color: var(--muted);
-}
-
-/* F2: a chart Panel's fallback when its series has too few points to plot —
-   either a single big number or a plain "not enough data yet" line. */
-.panel-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 120px;
-}
-
-@media (max-width: 720px) {
-  .kpi-strip {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
 /* G1: elevation ladder — a subtle top-light gradient instead of a flat fill
    (border stays 1px --line for now). */
 .panel {
@@ -866,29 +665,6 @@ kbd {
   padding: 16px;
   background: linear-gradient(180deg, var(--surface-2), var(--surface));
   min-width: 0;
-}
-
-.panel-wide {
-  grid-column: 1 / -1;
-}
-
-.panel-title {
-  font-size: 0.9375rem;
-  color: var(--muted);
-  margin: 0 0 12px;
-  font-weight: 500;
-}
-
-.mistake-row {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.mistake-card {
-  display: grid;
-  gap: 6px;
-  justify-items: center;
 }
 
 .game-table {
@@ -1097,12 +873,6 @@ tr.row-click {
      horizontally instead of vanishing. */
   .game-cards {
     display: block;
-  }
-}
-
-@media (max-width: 720px) {
-  .dash-grid {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -1552,7 +1322,6 @@ tr.row-click {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .eval-bar-fill,
   .game-eval-bar-black,
   .game-eval-bar-white {
     transition: none;
@@ -1671,29 +1440,6 @@ tr.row-click {
   pointer-events: none;
 }
 
-.bits-spotlight {
-  position: relative;
-}
-@media (hover: hover) {
-  .bits-spotlight::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(
-      circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      var(--bits-spotlight-color, color-mix(in srgb, var(--bone) 6%, transparent)),
-      transparent 70%
-    );
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    pointer-events: none;
-  }
-  .bits-spotlight:hover::before {
-    opacity: 1;
-  }
-}
-
 .bits-shiny {
   background-image: linear-gradient(120deg, var(--bone) 40%, rgba(255, 255, 255, 0.75) 50%, var(--bone) 60%);
   background-size: 200% 100%;
@@ -1727,32 +1473,6 @@ tr.row-click {
   }
 }
 
-.bits-electric {
-  position: relative;
-  isolation: isolate;
-}
-.bits-electric-defs {
-  position: absolute;
-  width: 0;
-  height: 0;
-}
-.bits-electric-ring,
-.bits-electric-glow,
-.bits-electric-fallback {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.bits-electric-ring {
-  border: 1.5px solid;
-}
-.bits-electric-fallback {
-  display: none;
-}
-.bits-electric-content {
-  position: relative;
-}
-
 /* React Bits adaptations, v2 pass */
 
 /* Fixed ambient layer shared by DotGrid / LetterGlitch / Noise. */
@@ -1783,17 +1503,6 @@ tr.row-click {
 .bits-split-char {
   --enter-y: 0.5em;
   animation: bits-enter var(--dur-slow) var(--ease-out) forwards;
-}
-
-/* TextType: reserve a line so retyping never reflows the page. */
-.bits-texttype {
-  display: block;
-  min-height: 1.5em;
-}
-/* B5: bone, not red — red stays reserved for the CTA/blunder accent. */
-.bits-texttype-cursor {
-  color: var(--bone);
-  animation: bits-cursor-blink 1s steps(2) infinite;
 }
 @keyframes bits-cursor-blink {
   50% {
@@ -1885,15 +1594,13 @@ tr.row-click {
 @media (hover: hover) {
   tr.row-click,
   .game-card,
-  .row-analyze,
-  .mistake-card {
+  .row-analyze{
     position: relative;
     overflow: hidden;
   }
   tr.row-click::after,
   .game-card::after,
-  .row-analyze::after,
-  .mistake-card::after {
+  .row-analyze::after{
     content: '';
     position: absolute;
     inset: 0;
@@ -1904,8 +1611,7 @@ tr.row-click {
   }
   tr.row-click:hover::after,
   .game-card:hover::after,
-  .row-analyze:hover::after,
-  .mistake-card:hover::after {
+  .row-analyze:hover::after{
     background-position: -30% 0;
     transition: background-position 600ms ease;
   }
@@ -1931,45 +1637,10 @@ tr.row-click {
   filter: brightness(0.92);
 }
 
-/* Progress page: bone shimmer along the fill while analysis runs. K14: gated
-   to .analyzing (added only while the job is non-terminal) — a completed or
-   failed job's bar used to keep shining forever. */
-.eval-bar-fill.analyzing {
-  background-image: linear-gradient(120deg, transparent 40%, rgba(255, 255, 255, 0.25) 50%, transparent 60%);
-  background-size: 200% 100%;
-  animation: bits-shine 2.5s linear infinite;
-}
-
 /* Progress chips arrive with a one-shot pop (runs on DOM insert only). */
 .chip {
   --enter-scale: 0.85;
   animation: bits-enter var(--dur-base) var(--ease-out) backwards;
-}
-
-/* Breakdown dashboard: panels rise in with a short stagger. */
-.dash-grid > * {
-  --enter-y: 16px;
-  animation: bits-enter var(--dur-base) var(--ease-out) backwards;
-}
-.dash-grid > *:nth-child(2) { animation-delay: 80ms; }
-.dash-grid > *:nth-child(3) { animation-delay: 160ms; }
-.dash-grid > *:nth-child(n + 4) { animation-delay: 240ms; }
-/* Panel-scale skeletons for the breakdown's loading state. */
-.skeleton-panel {
-  height: 220px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: linear-gradient(100deg, var(--surface) 40%, var(--surface-2) 50%, var(--surface) 60%);
-  background-size: 200% 100%;
-  /* D1: one shimmer duration (1.4s) across .skeleton-row/.skeleton-panel/
-     .analyzing-sweep. */
-  animation: bits-shine 1.4s linear infinite;
-}
-
-/* Story slides: entrance per slide advance (opacity/transform only). */
-.story-slide-in {
-  --enter-y: 14px;
-  animation: bits-enter var(--dur-base) var(--ease-pop) backwards;
 }
 
 /* H2: GooeyNav's pressed filter chip carries the same "this is the active
@@ -1993,21 +1664,13 @@ tr.row-click {
    JS by rendering a plain div, so it needs no rule here). */
 @media (prefers-reduced-motion: reduce) {
   .bits-split-char,
-  .bits-texttype-cursor,
   .bits-gooey-particle,
   .game-table tbody tr,
   .game-cards > li,
-  .chip,
-  .dash-grid > *,
-  .story-slide-in,
-  .eval-bar-fill,
-  .skeleton-panel {
+  .chip{
     animation: none !important;
   }
-  .bits-spark-canvas,
-  .bits-spotlight::before,
-  .bits-electric-ring,
-  .bits-electric-glow {
+  .bits-spark-canvas{
     display: none;
   }
   .bits-shiny {
@@ -2020,24 +1683,14 @@ tr.row-click {
   .cta .bits-shiny {
     color: #fff;
   }
-  .bits-electric-fallback {
-    display: block;
-    border: 1px solid var(--line);
-  }
   .bits-glitch::before,
   .bits-glitch::after {
     display: none;
   }
   tr.row-click::after,
   .game-card::after,
-  .row-analyze::after,
-  .mistake-card::after {
+  .row-analyze::after{
     display: none;
-  }
-  /* !important: specificity — .eval-bar-fill.analyzing (K14) otherwise beats
-     this plain-class rule. */
-  .eval-bar-fill {
-    background-image: none !important;
   }
 }
 

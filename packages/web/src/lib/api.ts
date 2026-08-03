@@ -1,36 +1,15 @@
-import type {
-  EngineRecord,
-  GameRecord,
-  PartialAgg,
-  RingEntry,
-  WrappedSummary,
-} from '@forked/shared'
+import type { EngineRecord, GameRecord } from '@forked/shared'
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8787'
-export type { WrappedSummary } from '@forked/shared'
 
-// The ring and the aggregates come off the wire in the exact shapes the job
-// item stores them in, so they are those types — restating them here let the
-// two drift.
-export type { PartialAgg, RingEntry } from '@forked/shared'
-
+// Only the fields anything here actually reads. GET /job/:id still sends the
+// counters, the ring and the partial aggregates — the completion transaction
+// keeps writing them — but no surface has read them since the progress page
+// went away, so typing them here would only be clutter.
 export interface JobView {
   jobId: string
   username: string | null
-  kind: 'archive' | 'single'
   gameId: string | null
-  status: 'ingesting' | 'analyzing' | 'finalizing' | 'complete' | 'failed'
-  total: number
-  completed: number
-  failed: number
-  ring: RingEntry[]
-  agg: PartialAgg
-  createdAt: string
-  // Cheap observed-throughput projection (control/status.ts); null when the
-  // job isn't analyzing yet or there's no rate to project from.
-  etaSeconds: number | null
-  wrapped: WrappedSummary | null
-  failures?: { gameId: string; error: string | null }[]
 }
 
 export interface GameReport {
@@ -107,12 +86,9 @@ export async function getUserGames(
 }
 
 export async function postIngest(body: {
-  username?: string
-  pgn?: string
-  from?: string
-  to?: string
-  gameId?: string
-  month?: string
+  username: string
+  gameId: string
+  month: string
 }): Promise<IngestOk | IngestErr> {
   try {
     const res = await fetch(`${API_BASE}/ingest`, {
@@ -126,28 +102,19 @@ export async function postIngest(body: {
   }
 }
 
-// K7: same 'notFound' vs null distinction as getGameReport above — a plain
-// getJob() collapses a real 404 and a network hiccup into the same null,
-// which the breakdown page needs to tell apart (a genuinely bad link vs
-// "try again"). This is the one fetcher for the endpoint; getJob is a
-// convenience view over it.
-export async function getJobOrNotFound(
-  jobId: string,
-  failures = false,
-): Promise<JobView | 'notFound' | null> {
+// Unlike getGameReport, this collapses a real 404 and a network hiccup into
+// the same null — both remaining callers (the games list and the review board)
+// only want the username or the game id, and treat "couldn't tell" the same as
+// "not there". The /j/[jobId] shim needs its own server-side fetch instead: it
+// runs during SSR, where it wants a request timeout and explicit no-store.
+export async function getJob(jobId: string): Promise<JobView | null> {
   try {
-    const res = await fetch(`${API_BASE}/job/${jobId}${failures ? '?failures=1' : ''}`)
-    if (res.status === 404) return 'notFound'
+    const res = await fetch(`${API_BASE}/job/${jobId}`)
     if (!res.ok) return null
     return (await res.json()) as JobView
   } catch {
     return null
   }
-}
-
-export async function getJob(jobId: string, failures = false): Promise<JobView | null> {
-  const r = await getJobOrNotFound(jobId, failures)
-  return r === 'notFound' ? null : r
 }
 
 export async function getPositionsJudged(): Promise<number | null> {

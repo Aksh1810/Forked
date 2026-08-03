@@ -67,14 +67,17 @@ is down" page.
 
 Gates (a) and (d) already run locally (`node scripts/local/gate-phase5.mjs`).
 
-**Gate (b): burst safety.** Ingest a ~100-game archive. In CloudWatch verify:
+**Gate (b): burst safety.** A job is one game, so the burst has to come from
+concurrency rather than job size: fire ~100 single-game ingests (different
+usernames, or the per-username lock makes them join instead of creating jobs).
+In CloudWatch verify:
 
 - Lambda ConcurrentExecutions for the worker function never exceeds 5
   (ScalingConfig caps it).
 - DLQ NumberOfMessagesSent = 0 and worker Errors = 0 for the run.
-- The job completes and the wrapped summary renders.
+- The job completes and the review board renders.
 
-**Gate (c): capacity honesty.** During the same job, chart DynamoDB
+**Gate (c): capacity honesty.** During the same burst, chart DynamoDB
 ConsumedReadCapacityUnits and ConsumedWriteCapacityUnits against the
 estimates in docs/costs.md. If reality disagrees with the doc, fix the doc
 (and if consumption approaches 20/20 sustained, that is a design bug to fix,

@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { GameRecordSchema } from './schemas.js'
-import { WrappedSummarySchema } from './wrapped.js'
 
 export const JobStatusSchema = z.enum(['ingesting', 'analyzing', 'finalizing', 'complete', 'failed'])
 export type JobStatus = z.infer<typeof JobStatusSchema>
@@ -48,10 +47,8 @@ export const emptyPartialAgg = (): PartialAgg => ({
 export const JobItemSchema = z.object({
   jobId: z.string(),
   username: z.string().nullable(),
-  // 'archive' (default) fans out a whole archive into the Wrapped story;
-  // 'single' is a one-game job whose progress page routes straight to that
-  // game's report instead of a one-game story. gameId is set only for 'single'.
-  kind: z.enum(['archive', 'single']).optional(),
+  // The job's one game, so /j/:id can route straight to that game's report.
+  // Optional only for jobs written before a job meant exactly one game.
   gameId: z.string().optional(),
   status: JobStatusSchema,
   total: z.number().int().nonnegative(),
@@ -63,9 +60,6 @@ export const JobItemSchema = z.object({
   createdAt: z.string(),
   deadlineAt: z.string(),
   completedAt: z.string().optional(),
-  // Written once by the finalizer; the single read model for the story, cards,
-  // OG image, and dashboard. Absent until the job is complete.
-  wrapped: WrappedSummarySchema.optional(),
 })
 export type JobItem = z.infer<typeof JobItemSchema>
 

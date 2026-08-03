@@ -1,23 +1,18 @@
 # forked
 
-Distributed chess analysis. Enter a chess.com username and you get two things:
-every game you have ever played, listed instantly, any one of which a
-server-side Stockfish analyzes into a full move-by-move review; and, from the
-whole archive at once, a Wrapped-style story, a shareable card, and
-archive-level insights no per-game tool gives: blunder rate by opening, by
-game phase, by time pressure, accuracy trends over time, and a computed
-archetype.
+Distributed chess analysis. Enter a chess.com username and every game you have
+ever played is listed instantly, any one of which a server-side Stockfish
+analyzes into a full move-by-move review.
 
 The review board is the everyday surface: classified moves, coach commentary,
 an eval graph, and a second Stockfish running in your browser so you can grab
 a piece and explore any variation with live evaluation. Every game also has a
 one-screen "moment you lost" — the single ply where your win probability fell
 off a cliff, replayed with the move you played, the move you missed, and the
-reply that punished it. The archive is the
-part nothing else does: server-side, fanned out across a worker pool, the same
-engine depth whether you open it from a workstation or a phone, incremental
-re-syncs served from a content-addressed cache, and the whole thing open
-source and self-hostable.
+reply that punished it. The analysis is the part nothing else does:
+server-side, fanned out across a worker pool, the same engine depth whether you
+open it from a workstation or a phone, repeat requests served from a
+content-addressed cache, and the whole thing open source and self-hostable.
 
 ## Architecture
 
@@ -25,7 +20,6 @@ source and self-hostable.
 flowchart LR
   subgraph web [Next.js web]
     L[landing] --> G[games list] --> R[review board + in-browser engine]
-    L --> P[progress] --> S[story / card / dashboard]
   end
   subgraph control [control plane, one Lambda behind one Function URL]
     I[ingest]
@@ -60,7 +54,7 @@ One npm-workspaces monorepo: `packages/shared` (pure domain logic, the most
 heavily tested code in the repo), `packages/worker` (UCI engine wrapper and
 both worker entrypoints), `packages/control` (HTTP API, ingest, janitor, CDK
 stack), `packages/web` (Next.js frontend). The domain vocabulary — engine
-record, game walk, player identity, review session, the classification-vs-tier
+record, player identity, review session, the classification-vs-tier
 split — is defined in [`CONTEXT.md`](CONTEXT.md); each concept lives behind one
 module named after it.
 
@@ -102,7 +96,7 @@ cached record cannot — evaluate positions that were never played. Pick up a
 piece anywhere in the game and the branch you create is evaluated live at
 MultiPV 3, with the same classification badges the mainline gets. The stored
 per-ply classification is a deliberately coarse four-value enum
-(`blunder | mistake | inaccuracy | none`) that feeds insights and accuracy;
+(`blunder | mistake | inaccuracy | none`) that feeds accuracy;
 the finer display tiers you actually see are derived at render
 time from the same record, so re-tuning the bands re-labels every
 already-analyzed game without re-running a single engine.
@@ -142,9 +136,9 @@ defeated per run so every game is a fresh analysis.
 ## Privacy model
 
 - Everything analyzed is already public: chess.com archives are public API
-  data, and pasted PGNs are analyzed for whoever pasted them.
+  data.
 - A job URL is an unguessable UUID capability: anyone you send the link to
-  can see that story. Do not share the link if you do not want that.
+  can see that analysis. Do not share the link if you do not want that.
 - Engine analysis is cached by move sequence, deliberately containing nothing
   about who played the moves. Clock data lives only in per-job game records.
 - No accounts, no cookies, no tracking. The only PII stored is what chess.com
@@ -154,8 +148,8 @@ defeated per run so every game is a fresh analysis.
 
 No authentication surface exists (no accounts, no sessions). All write
 endpoints are rate limited per IP per day; input is validated at every trust
-boundary (username and month regexes, PGN games capped per job and per game
-length, header fields length-capped at parse); the web app ships CSP and
+boundary (username and month regexes, per-game length caps, header fields
+length-capped at parse); the web app ships CSP and
 frame-denial headers; the table is provisioned, not on-demand, so abuse
 throttles instead of billing; workers run as a non-root user and the engine
 is a separate pinned-release process, never linked in.

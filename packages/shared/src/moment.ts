@@ -1,6 +1,6 @@
 import type { EngineRecord, PlyAnalysis } from './schemas.js'
 import { moverWinPct } from './win.js'
-import { fenBeforePly } from './walk.js'
+import { fenBeforePly } from './pgn.js'
 
 // "The moment you lost": the viewer's single worst move — the biggest win%
 // drop among the plies THEY played. Mirrors turningPoint's threshold (a
